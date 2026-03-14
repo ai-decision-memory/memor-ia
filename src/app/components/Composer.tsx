@@ -63,8 +63,8 @@ export function Composer({
         onChange={(event) => onInputChange(event.target.value)}
         onKeyDown={handleKeyDown}
         placeholder="Write a message..."
-        rows={3}
-        className="w-full resize-none bg-transparent px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-muted"
+        rows={2}
+        className="w-full resize-none bg-transparent px-3 py-1.5 text-sm text-text-primary outline-none placeholder:text-text-muted"
       />
       <div className="flex h-6 items-center justify-end overflow-hidden pr-3">
         <button

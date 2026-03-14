@@ -502,8 +502,8 @@ const ConnectedChatWorkspace = ({
   };
 
   return (
-    <div className="flex h-screen flex-col bg-page lg:flex-row">
-      <aside className="w-full bg-sidebar px-4 py-4 text-text-primary lg:h-screen lg:w-72 lg:shrink-0 lg:overflow-y-auto">
+    <div className="flex h-screen flex-col bg-sidebar lg:flex-row">
+      <aside className="w-full px-4 py-4 text-text-primary lg:h-screen lg:w-72 lg:shrink-0 lg:overflow-y-auto">
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs font-semibold uppercase tracking-[0.25em] text-text-muted">
             Chats
@@ -578,8 +578,8 @@ const ConnectedChatWorkspace = ({
         </nav>
       </aside>
 
-      <main className="flex min-h-0 flex-1 flex-col bg-page py-4 lg:my-3 lg:mr-3 lg:rounded-2xl">
-        <div className="flex flex-1 flex-col overflow-hidden px-4 lg:px-6">
+      <main className="flex min-h-0 flex-1 flex-col rounded-2xl bg-page p-4 lg:my-3 lg:mr-3 lg:p-6">
+        <div className="flex flex-1 flex-col overflow-hidden">
           <MessageHistory messages={messages} />
 
           {clientError ? (
