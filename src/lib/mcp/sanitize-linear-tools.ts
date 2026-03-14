@@ -18,6 +18,7 @@ type LinearTeamScope = {
 };
 
 const LINEAR_TEAM_FIELD_VALUES = {
+  team: (scope: LinearTeamScope) => scope.teamKey,
   teamId: (scope: LinearTeamScope) => scope.teamId,
   teamKey: (scope: LinearTeamScope) => scope.teamKey,
   teamName: (scope: LinearTeamScope) => scope.teamName,
@@ -173,6 +174,15 @@ function wrapToolWithLinearErrorBoundary(toolName: string, tool: ToolLike): Tool
   };
 }
 
+function decorateLinearTool(tool: ToolLike): ToolLike {
+  const description = tool.description?.trim();
+
+  return {
+    ...tool,
+    description: description ? `Linear team tool. ${description}` : "Linear team tool.",
+  };
+}
+
 function matchesAnyPattern(value: string, patterns: readonly RegExp[]) {
   return patterns.some((pattern) => pattern.test(value));
 }
@@ -218,5 +228,10 @@ export function sanitizeLinearToolsForChat<T extends Record<string, ToolLike>>(
     );
   }
 
-  return sanitized as T;
+  return Object.fromEntries(
+    Object.entries(sanitized).map(([toolName, tool]) => [
+      `linear_${toolName}`,
+      decorateLinearTool(tool),
+    ])
+  ) as Record<string, ToolLike>;
 }

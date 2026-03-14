@@ -28,8 +28,8 @@ export async function supabaseRequest<T>({
   searchParams,
   tableName,
 }: {
-  body?: Record<string, string | null>;
-  method: "GET" | "PATCH" | "POST";
+  body?: Record<string, unknown>;
+  method: "DELETE" | "GET" | "PATCH" | "POST";
   prefer?: string;
   searchParams?: Record<string, string>;
   tableName: string;

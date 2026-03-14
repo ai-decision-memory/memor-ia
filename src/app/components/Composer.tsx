@@ -1,4 +1,4 @@
-import { FormEvent } from "react";
+import { FormEvent, KeyboardEvent } from "react";
 
 type ComposerProps = {
   input: string;
@@ -18,12 +18,18 @@ export function Composer({
   const isStreaming = status === "streaming";
   const isSending = status === "submitted";
   const isBusy = isStreaming || isSending;
+  const hasInput = input.trim().length > 0;
+  const showAction = hasInput || isBusy;
+  const label = isBusy ? "stop" : "send";
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const submit = async () => {
+    if (isBusy) {
+      onStop();
+      return;
+    }
 
     const trimmedInput = input.trim();
-    if (!trimmedInput || isBusy) {
+    if (!trimmedInput) {
       return;
     }
 
@@ -31,40 +37,52 @@ export function Composer({
     await onSendMessage({ text: trimmedInput });
   };
 
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    await submit();
+  };
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      void submit();
+    }
+  };
+
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-xl border border-zinc-200 bg-white p-3 shadow-sm"
+      className="mx-auto mt-auto w-full max-w-3xl rounded-xl bg-sidebar p-3"
     >
       <label htmlFor="chat-input" className="sr-only">
         Message
       </label>
-      <div className="flex items-end gap-2">
-        <textarea
-          id="chat-input"
-          value={input}
-          onChange={(event) => onInputChange(event.target.value)}
-          placeholder="Write a message..."
-          rows={3}
-          className="min-h-[84px] flex-1 text-gray-600 resize-none rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none transition focus:border-zinc-400"
-        />
-        <div className="flex flex-col gap-2">
-          <button
-            type="submit"
-            disabled={!input.trim() || isBusy}
-            className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Send
-          </button>
-          <button
-            type="button"
-            onClick={onStop}
-            disabled={!isStreaming}
-            className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Stop
-          </button>
-        </div>
+      <textarea
+        id="chat-input"
+        value={input}
+        onChange={(event) => onInputChange(event.target.value)}
+        onKeyDown={handleKeyDown}
+        placeholder="Write a message..."
+        rows={3}
+        className="w-full resize-none bg-transparent px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-muted"
+      />
+      <div className="flex h-6 items-center justify-end overflow-hidden pr-3">
+        <button
+          type="submit"
+          className={`text-xs font-medium transition-all duration-200 ${
+            showAction
+              ? "translate-y-0 opacity-100"
+              : "pointer-events-none translate-y-3 opacity-0"
+          } ${
+            label === "stop"
+              ? "text-text-muted"
+              : "text-text-secondary hover:text-text-primary"
+          }`}
+          style={label === "stop" ? { animation: "pulse-subtle 2s ease-in-out infinite" } : undefined}
+          tabIndex={showAction ? 0 : -1}
+        >
+          {label === "stop" ? "\u25A0 stop" : "send \u2192"}
+        </button>
       </div>
     </form>
   );
