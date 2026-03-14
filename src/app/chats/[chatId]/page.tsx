@@ -25,6 +25,7 @@ export default async function ChatPage({ params }: ChatPageProps) {
       isSlackConnected={pageData.isSlackConnected}
       linearApiKeyError={pageData.linearApiKeyError}
       linearApiKeySession={pageData.linearApiKeySession}
+      slackSession={pageData.slackSession}
     />
   );
 }

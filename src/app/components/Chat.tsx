@@ -8,7 +8,7 @@ import { useChat } from "@ai-sdk/react";
 import { UIMessage } from "ai";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Composer } from "./Composer";
 import { MessageHistory } from "./MessageHistory";
 
@@ -25,6 +25,154 @@ type PersistedChat = ChatSummary & {
 
 const NEW_CHAT_ID = "new-chat";
 
+function StatusDot({ connected }: { connected: boolean }) {
+  return (
+    <span
+      className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${
+        connected ? "bg-emerald-400" : "bg-red-400"
+      }`}
+    />
+  );
+}
+
+function McpIcon() {
+  return (
+    <svg fill="currentColor" fillRule="evenodd" height="14" width="14" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M15.688 2.343a2.588 2.588 0 00-3.61 0l-9.626 9.44a.863.863 0 01-1.203 0 .823.823 0 010-1.18l9.626-9.44a4.313 4.313 0 016.016 0 4.116 4.116 0 011.204 3.54 4.3 4.3 0 013.609 1.18l.05.05a4.115 4.115 0 010 5.9l-8.706 8.537a.274.274 0 000 .393l1.788 1.754a.823.823 0 010 1.18.863.863 0 01-1.203 0l-1.788-1.753a1.92 1.92 0 010-2.754l8.706-8.538a2.47 2.47 0 000-3.54l-.05-.049a2.588 2.588 0 00-3.607-.003l-7.172 7.034-.002.002-.098.097a.863.863 0 01-1.204 0 .823.823 0 010-1.18l7.273-7.133a2.47 2.47 0 00-.003-3.537z" /><path d="M14.485 4.703a.823.823 0 000-1.18.863.863 0 00-1.204 0l-7.119 6.982a4.115 4.115 0 000 5.9 4.314 4.314 0 006.016 0l7.12-6.982a.823.823 0 000-1.18.863.863 0 00-1.204 0l-7.119 6.982a2.588 2.588 0 01-3.61 0 2.47 2.47 0 010-3.54l7.12-6.982z" /></svg>
+  );
+}
+
+function WarningIcon() {
+  return <span className="text-xs leading-none">⚠️</span>;
+}
+
+function ConnectionModal({
+  onClose,
+  children,
+}: {
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="w-full max-w-md rounded-2xl bg-sidebar p-6">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function GitHubModal({ onClose, serverError }: { onClose: () => void; serverError: string | null }) {
+  const [error, setError] = useState<string | null>(serverError);
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+
+    const response = await fetch("/api/github/pat", {
+      method: "POST",
+      body: new FormData(e.currentTarget),
+      redirect: "manual",
+    });
+
+    if (response.type === "opaqueredirect" || response.status === 307) {
+      window.location.reload();
+      return;
+    }
+
+    setError((await response.text()) || "Failed to save GitHub PAT");
+    setSubmitting(false);
+  };
+
+  return (
+    <ConnectionModal onClose={onClose}>
+      <p className="text-sm font-medium text-text-primary">Connect GitHub</p>
+      <p className="mt-1 text-xs text-text-muted">
+        Generate a fine-grained PAT in{" "}
+        <a className="underline" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer">GitHub settings</a>.
+      </p>
+      {error ? (
+        <p className="mt-3 rounded-lg bg-red-950/40 p-2 text-xs text-red-400">{error}</p>
+      ) : null}
+      <form onSubmit={handleSubmit} className="mt-4 space-y-3">
+        <div>
+          <label className="block text-xs font-medium text-text-secondary" htmlFor="modal-github-org">Organization login</label>
+          <input id="modal-github-org" name="organizationLogin" type="text" required placeholder="your-org"
+            className="mt-1 w-full rounded-lg bg-page px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-muted" />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-text-secondary" htmlFor="modal-github-pat">Personal access token</label>
+          <input id="modal-github-pat" name="personalAccessToken" type="password" required placeholder="github_pat_..."
+            className="mt-1 w-full rounded-lg bg-page px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-muted" />
+        </div>
+        <div className="flex items-center justify-end gap-3 pt-1">
+          <button type="button" onClick={onClose} className="text-xs text-text-muted hover:text-text-primary">Cancel</button>
+          <button type="submit" disabled={submitting}
+            className="rounded-lg bg-accent px-4 py-1.5 text-xs font-medium text-accent-text transition hover:opacity-80 disabled:opacity-40">
+            {submitting ? "Saving..." : "Save"}
+          </button>
+        </div>
+      </form>
+    </ConnectionModal>
+  );
+}
+
+function LinearModal({ onClose, serverError }: { onClose: () => void; serverError: string | null }) {
+  const [error, setError] = useState<string | null>(serverError);
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+
+    const response = await fetch("/api/linear/api-key", {
+      method: "POST",
+      body: new FormData(e.currentTarget),
+      redirect: "manual",
+    });
+
+    if (response.type === "opaqueredirect" || response.status === 307) {
+      window.location.reload();
+      return;
+    }
+
+    setError((await response.text()) || "Failed to save Linear API key");
+    setSubmitting(false);
+  };
+
+  return (
+    <ConnectionModal onClose={onClose}>
+      <p className="text-sm font-medium text-text-primary">Connect Linear</p>
+      <p className="mt-1 text-xs text-text-muted">
+        Generate a personal API key from{" "}
+        <a className="underline" href="https://linear.app/settings/account/security" target="_blank" rel="noreferrer">Linear settings</a>.
+      </p>
+      {error ? (
+        <p className="mt-3 rounded-lg bg-red-950/40 p-2 text-xs text-red-400">{error}</p>
+      ) : null}
+      <form onSubmit={handleSubmit} className="mt-4 space-y-3">
+        <div>
+          <label className="block text-xs font-medium text-text-secondary" htmlFor="modal-linear-key">Personal API key</label>
+          <input id="modal-linear-key" name="personalApiKey" type="password" required placeholder="lin_api_..."
+            className="mt-1 w-full rounded-lg bg-page px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-muted" />
+        </div>
+        <div className="flex items-center justify-end gap-3 pt-1">
+          <button type="button" onClick={onClose} className="text-xs text-text-muted hover:text-text-primary">Cancel</button>
+          <button type="submit" disabled={submitting}
+            className="rounded-lg bg-accent px-4 py-1.5 text-xs font-medium text-accent-text transition hover:opacity-80 disabled:opacity-40">
+            {submitting ? "Saving..." : "Save"}
+          </button>
+        </div>
+      </form>
+    </ConnectionModal>
+  );
+}
+
 export const Chat = ({
   activeChat,
   chats,
@@ -33,6 +181,7 @@ export const Chat = ({
   isSlackConnected,
   linearApiKeyError,
   linearApiKeySession,
+  slackSession,
 }: {
   activeChat: PersistedChat | null;
   chats: ChatSummary[];
@@ -48,201 +197,9 @@ export const Chat = ({
     teamName: string;
     userName: string;
   } | null;
-}) => {
-  if (!isSlackConnected || !githubPatSession || !linearApiKeySession) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-page px-4 py-8">
-        <section className="w-full max-w-2xl rounded-2xl bg-sidebar p-6 text-center">
-          <p className="text-lg font-medium text-text-primary">
-            Connect Slack, add a GitHub PAT, and add a Linear API key to start chatting.
-          </p>
-          <p className="mt-2 text-sm text-text-secondary">
-            Slack is connected through OAuth. GitHub uses a fine-grained personal
-            access token stored server-side for the current session. Linear uses a
-            personal API key stored server-side for the current session.
-          </p>
-          <div className="mt-5 space-y-4 text-left">
-            {isSlackConnected ? (
-              <span className="inline-flex rounded-full border border-border-strong bg-surface-raised px-4 py-2 text-sm font-medium text-text-primary">
-                Slack connected
-              </span>
-            ) : (
-              <a
-                className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-medium text-page transition hover:bg-text-secondary"
-                href="/api/slack/connect"
-              >
-                Connect Slack
-              </a>
-            )}
-
-            {githubPatSession ? (
-              <span className="inline-flex rounded-full border border-border-strong bg-surface-raised px-4 py-2 text-sm font-medium text-text-primary">
-                GitHub connected as {githubPatSession.userLogin} for {githubPatSession.orgLogin}
-              </span>
-            ) : (
-              <div className="space-y-3">
-                <p className="text-sm text-text-secondary">
-                  Generate a fine-grained PAT in{" "}
-                  <a
-                    className="font-medium text-text-primary underline"
-                    href="https://github.com/settings/personal-access-tokens/new"
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    GitHub settings
-                  </a>
-                  .
-                </p>
-                <ul className="list-disc space-y-1 pl-5 text-sm text-text-secondary">
-                  <li>Set the organization as the resource owner.</li>
-                  <li>Select the repositories the agent should inspect.</li>
-                  <li>Grant repository read access to Contents, Deployments, Issues, and Metadata.</li>
-                  <li>Grant organization read access to Members so the agent can inspect teams and members.</li>
-                </ul>
-                {githubPatError ? (
-                  <p className="rounded-lg border border-red-900/50 bg-red-950/30 p-3 text-sm text-red-400">
-                    {githubPatError}
-                  </p>
-                ) : null}
-                <form
-                  action="/api/github/pat"
-                  method="post"
-                  className="space-y-3"
-                >
-                  <div>
-                    <label
-                      className="block text-sm font-medium text-text-primary"
-                      htmlFor="github-org-login"
-                    >
-                      Organization login
-                    </label>
-                    <input
-                      id="github-org-login"
-                      name="organizationLogin"
-                      type="text"
-                      className="mt-1 w-full rounded-lg border border-border-subtle bg-page px-3 py-2 text-sm text-text-primary outline-none transition focus:border-border-strong"
-                      placeholder="your-org"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label
-                      className="block text-sm font-medium text-text-primary"
-                      htmlFor="github-pat"
-                    >
-                      Fine-grained personal access token
-                    </label>
-                    <input
-                      id="github-pat"
-                      name="personalAccessToken"
-                      type="password"
-                      className="mt-1 w-full rounded-lg border border-border-subtle bg-page px-3 py-2 text-sm text-text-primary outline-none transition focus:border-border-strong"
-                      placeholder="github_pat_..."
-                      required
-                    />
-                  </div>
-                  <button
-                    className="inline-flex rounded-full border border-border-strong bg-surface px-5 py-3 text-sm font-medium text-text-primary transition hover:bg-surface-raised"
-                    type="submit"
-                  >
-                    Save GitHub PAT
-                  </button>
-                </form>
-              </div>
-            )}
-
-            {linearApiKeySession ? (
-              <span className="inline-flex rounded-full border border-border-strong bg-surface-raised px-4 py-2 text-sm font-medium text-text-primary">
-                Linear connected as {linearApiKeySession.userName} for {linearApiKeySession.teamKey} ({linearApiKeySession.teamName})
-              </span>
-            ) : (
-              <div className="space-y-3">
-                <p className="text-sm text-text-secondary">
-                  Open Linear and generate a personal API key from{" "}
-                  <a
-                    className="font-medium text-text-primary underline"
-                    href="https://linear.app/settings/account/security"
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    Settings &gt; Account &gt; Security &amp; Access
-                  </a>
-                  .
-                </p>
-                <ul className="list-disc space-y-1 pl-5 text-sm text-text-secondary">
-                  <li>If you do not see Personal API keys there, ask a Linear admin to enable Member API keys in Settings &gt; Administration &gt; API.</li>
-                  <li>You only need one personal API key here. There is no separate team API key for this app.</li>
-                  <li>Limit that API key to exactly one team. The app will infer the team automatically from the key.</li>
-                  <li>Grant read access so the assistant can inspect issues, projects, and workflow states.</li>
-                </ul>
-                {linearApiKeyError ? (
-                  <p className="rounded-lg border border-red-900/50 bg-red-950/30 p-3 text-sm text-red-400">
-                    {linearApiKeyError}
-                  </p>
-                ) : null}
-                <form
-                  action="/api/linear/api-key"
-                  method="post"
-                  className="space-y-3"
-                >
-                  <div>
-                    <label
-                      className="block text-sm font-medium text-text-primary"
-                      htmlFor="linear-api-key"
-                    >
-                      Personal API key
-                    </label>
-                    <input
-                      id="linear-api-key"
-                      name="personalApiKey"
-                      type="password"
-                      className="mt-1 w-full rounded-lg border border-border-subtle bg-page px-3 py-2 text-sm text-text-primary outline-none transition focus:border-border-strong"
-                      placeholder="lin_api_..."
-                      required
-                    />
-                  </div>
-                  <button
-                    className="inline-flex rounded-full border border-border-strong bg-surface px-5 py-3 text-sm font-medium text-text-primary transition hover:bg-surface-raised"
-                    type="submit"
-                  >
-                    Save Linear API key
-                  </button>
-                </form>
-              </div>
-            )}
-          </div>
-        </section>
-      </div>
-    );
-  }
-
-  return (
-    <ConnectedChatWorkspace
-      activeChat={activeChat}
-      chats={chats}
-      githubPatSession={githubPatSession}
-      linearApiKeySession={linearApiKeySession}
-    />
-  );
-};
-
-const ConnectedChatWorkspace = ({
-  activeChat,
-  chats,
-  githubPatSession,
-  linearApiKeySession,
-}: {
-  activeChat: PersistedChat | null;
-  chats: ChatSummary[];
-  githubPatSession: {
-    orgLogin: string;
-    userLogin: string;
-  };
-  linearApiKeySession: {
-    teamKey: string;
-    teamName: string;
-    userName: string;
-  };
+  slackSession: {
+    teamName: string | null;
+  } | null;
 }) => {
   const router = useRouter();
   const [clientError, setClientError] = useState<string | null>(null);
@@ -252,6 +209,11 @@ const ConnectedChatWorkspace = ({
   const [pendingInitialPrompt, setPendingInitialPrompt] = useState<string | null>(null);
   const [sidebarChats, setSidebarChats] = useState<ChatSummary[]>(chats);
   const [transientChat, setTransientChat] = useState<PersistedChat | null>(null);
+  const [openModal, setOpenModal] = useState<"github" | "linear" | null>(
+    githubPatError ? "github" : linearApiKeyError ? "linear" : null,
+  );
+
+  const allConnected = isSlackConnected && !!githubPatSession && !!linearApiKeySession;
 
   const resolvedActiveChat = transientChat ?? activeChat;
   const activeChatId = resolvedActiveChat?.id ?? null;
@@ -450,7 +412,7 @@ const ConnectedChatWorkspace = ({
         messages: [],
       });
       setPendingInitialPrompt(text);
-      router.replace(`/chats/${createdChat.id}`);
+      window.history.replaceState(null, "", `/chats/${createdChat.id}`);
     } catch (createError) {
       setClientError(
         createError instanceof Error
@@ -503,10 +465,10 @@ const ConnectedChatWorkspace = ({
 
   return (
     <div className="flex h-screen flex-col bg-sidebar lg:flex-row">
-      <aside className="w-full px-4 py-4 text-text-primary lg:h-screen lg:w-72 lg:shrink-0 lg:overflow-y-auto">
+      <aside className="flex w-full flex-col px-4 py-4 text-text-primary lg:h-screen lg:w-72 lg:shrink-0">
         <div className="flex items-center justify-between gap-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-text-muted">
-            Chats
+          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-text-muted">
+            Conversations
           </p>
           <button
             type="button"
@@ -517,26 +479,7 @@ const ConnectedChatWorkspace = ({
           </button>
         </div>
 
-        <div className="mt-4 grid gap-1.5 text-sm">
-          <div className="rounded-lg bg-surface-raised px-3 py-2">
-            <p className="text-xs font-medium text-text-secondary">
-              GitHub: {githubPatSession.orgLogin}
-            </p>
-            <p className="text-xs text-text-muted">
-              {githubPatSession.userLogin}
-            </p>
-          </div>
-          <div className="rounded-lg bg-surface-raised px-3 py-2">
-            <p className="text-xs font-medium text-text-secondary">
-              Linear: {linearApiKeySession.teamKey}
-            </p>
-            <p className="text-xs text-text-muted">
-              {linearApiKeySession.teamName}
-            </p>
-          </div>
-        </div>
-
-        <nav className="mt-5 space-y-0.5">
+        <nav className="mt-5 flex-1 space-y-0.5 overflow-y-auto">
           {sidebarChats.length === 0 ? (
             <div className="px-3 py-6 text-sm text-text-muted">
               No chats yet.
@@ -576,24 +519,85 @@ const ConnectedChatWorkspace = ({
             })
           )}
         </nav>
+
+        <div className="group mt-3 shrink-0 rounded-xl transition-colors duration-300 hover:bg-page">
+          <div className="grid grid-rows-[0fr] transition-[grid-template-rows] duration-300 ease-in-out group-hover:grid-rows-[1fr]">
+            <div className="overflow-hidden">
+              <div className="space-y-2.5 px-3 pt-3 pb-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <StatusDot connected={isSlackConnected} />
+                    <p className="text-xs font-medium text-text-primary">Slack</p>
+                  </div>
+                  {isSlackConnected ? (
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs text-text-muted">{slackSession?.teamName ?? "Connected"}</p>
+                      <a href="/api/slack/connect" className="text-xs text-text-muted hover:text-text-primary">(reconnect)</a>
+                    </div>
+                  ) : (
+                    <a href="/api/slack/connect" className="text-xs font-medium text-accent hover:underline">Connect</a>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <StatusDot connected={!!githubPatSession} />
+                    <p className="text-xs font-medium text-text-primary">GitHub</p>
+                  </div>
+                  {githubPatSession ? (
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs text-text-muted">{githubPatSession.orgLogin}</p>
+                      <button type="button" onClick={() => setOpenModal("github")} className="text-xs text-text-muted hover:text-text-primary">(change)</button>
+                    </div>
+                  ) : (
+                    <button type="button" onClick={() => setOpenModal("github")} className="text-xs font-medium text-accent hover:underline">Connect</button>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <StatusDot connected={!!linearApiKeySession} />
+                    <p className="text-xs font-medium text-text-primary">Linear</p>
+                  </div>
+                  {linearApiKeySession ? (
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs text-text-muted">{linearApiKeySession.teamName}</p>
+                      <button type="button" onClick={() => setOpenModal("linear")} className="text-xs text-text-muted hover:text-text-primary">(change)</button>
+                    </div>
+                  ) : (
+                    <button type="button" onClick={() => setOpenModal("linear")} className="text-xs font-medium text-accent hover:underline">Connect</button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 px-3 py-2.5 text-text-muted">
+            <McpIcon />
+            <span className="text-xs">MCP Connections</span>
+            {!allConnected ? <WarningIcon /> : null}
+          </div>
+        </div>
       </aside>
 
       <main className="flex min-h-0 flex-1 flex-col rounded-2xl bg-page p-4 lg:my-3 lg:mr-3 lg:p-6">
-        <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="min-h-0 flex-1">
           <MessageHistory messages={messages} />
+        </div>
 
-          {clientError ? (
-            <p className="mx-auto mt-2 w-full max-w-3xl rounded-lg bg-red-950/40 p-3 text-sm text-red-400">
-              {clientError}
-            </p>
-          ) : null}
+        {clientError ? (
+          <p className="mx-auto mt-2 w-full max-w-3xl rounded-lg bg-red-950/40 p-3 text-sm text-red-400">
+            {clientError}
+          </p>
+        ) : null}
 
-          {error ? (
-            <p className="mx-auto mt-2 w-full max-w-3xl rounded-lg bg-red-950/40 p-3 text-sm text-red-400">
-              {error.message}
-            </p>
-          ) : null}
+        {error ? (
+          <p className="mx-auto mt-2 w-full max-w-3xl rounded-lg bg-red-950/40 p-3 text-sm text-red-400">
+            {error.message}
+          </p>
+        ) : null}
 
+        <div className="shrink-0 pt-2">
           <Composer
             input={input}
             onInputChange={setInput}
@@ -603,6 +607,9 @@ const ConnectedChatWorkspace = ({
           />
         </div>
       </main>
+
+      {openModal === "github" ? <GitHubModal onClose={() => setOpenModal(null)} serverError={githubPatError} /> : null}
+      {openModal === "linear" ? <LinearModal onClose={() => setOpenModal(null)} serverError={linearApiKeyError} /> : null}
     </div>
   );
 };

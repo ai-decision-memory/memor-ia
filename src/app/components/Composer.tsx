@@ -1,4 +1,39 @@
+"use client";
+
+import { motion, type Transition } from "motion/react";
 import { FormEvent, KeyboardEvent } from "react";
+
+function BorderTrail({
+  className,
+  size = 60,
+  transition,
+}: {
+  className?: string;
+  size?: number;
+  transition?: Transition;
+}) {
+  const defaultTransition: Transition = {
+    repeat: Infinity,
+    duration: 4,
+    ease: "linear",
+  };
+
+  return (
+    <div className="pointer-events-none absolute inset-0 rounded-[inherit] border border-transparent [mask-clip:padding-box,border-box] [mask-composite:intersect] [mask-image:linear-gradient(transparent,transparent),linear-gradient(#000,#000)]">
+      <motion.div
+        className={`absolute aspect-square ${className ?? "bg-zinc-500"}`}
+        style={{
+          width: size,
+          offsetPath: `rect(0 auto auto 0 round ${size}px)`,
+        }}
+        animate={{
+          offsetDistance: ["0%", "100%"],
+        }}
+        transition={transition ?? defaultTransition}
+      />
+    </div>
+  );
+}
 
 type ComposerProps = {
   input: string;
@@ -52,8 +87,19 @@ export function Composer({
   return (
     <form
       onSubmit={handleSubmit}
-      className="mx-auto mt-auto w-full max-w-3xl rounded-xl bg-sidebar p-3"
+      className="relative mx-auto w-full max-w-3xl rounded-xl bg-sidebar p-3"
     >
+      {isBusy ? (
+        <BorderTrail
+          size={80}
+          className="bg-gradient-to-l from-zinc-400 via-zinc-500/50 to-transparent"
+          transition={{
+            repeat: Infinity,
+            duration: 3,
+            ease: "linear",
+          }}
+        />
+      ) : null}
       <label htmlFor="chat-input" className="sr-only">
         Message
       </label>

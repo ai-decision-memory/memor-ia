@@ -44,18 +44,6 @@ export async function validateGitHubPersonalAccessToken({
     throw new Error("GitHub organization login is required");
   }
 
-  const userResponse = await fetch("https://api.github.com/user", {
-    cache: "no-store",
-    headers: getGitHubAuthHeaders(githubPersonalAccessToken),
-  });
-
-  if (!userResponse.ok) {
-    throw new Error("GitHub PAT validation failed for /user");
-  }
-
-  const authenticatedUser =
-    (await userResponse.json()) as GitHubAuthenticatedUserResponse;
-
   const repositoriesUrl = new URL(
     `/orgs/${encodeURIComponent(normalizedOrganizationLogin)}/repos`,
     "https://api.github.com"
@@ -71,8 +59,9 @@ export async function validateGitHubPersonalAccessToken({
   });
 
   if (!repositoriesResponse.ok) {
+    const errorBody = await repositoriesResponse.text().catch(() => "");
     throw new Error(
-      `GitHub PAT validation failed for organization ${normalizedOrganizationLogin}`
+      `GitHub PAT validation failed for organization ${normalizedOrganizationLogin} (${repositoriesResponse.status}: ${errorBody})`
     );
   }
 
@@ -97,12 +86,27 @@ export async function validateGitHubPersonalAccessToken({
     );
   }
 
+  let githubUserId = "";
+  let githubUserLogin = normalizedOrganizationLogin;
+
+  const userResponse = await fetch("https://api.github.com/user", {
+    cache: "no-store",
+    headers: getGitHubAuthHeaders(githubPersonalAccessToken),
+  });
+
+  if (userResponse.ok) {
+    const authenticatedUser =
+      (await userResponse.json()) as GitHubAuthenticatedUserResponse;
+    githubUserId = String(authenticatedUser.id);
+    githubUserLogin = authenticatedUser.login;
+  }
+
   return {
     githubOrgLogin: normalizedOrganizationLogin,
     githubPatExpiresAt: null,
     githubPatLastValidatedAt: new Date().toISOString(),
-    githubUserId: String(authenticatedUser.id),
-    githubUserLogin: authenticatedUser.login,
+    githubUserId,
+    githubUserLogin,
     sampleRepositoryFullName: repositories[0]?.full_name ?? null,
   };
 }

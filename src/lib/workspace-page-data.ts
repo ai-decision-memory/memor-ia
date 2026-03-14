@@ -18,6 +18,7 @@ export async function getWorkspacePageData(activeChatId?: string) {
       githubPatError,
       githubPatSession: null,
       isSlackConnected: false,
+      slackSession: null,
       linearApiKeyError,
       linearApiKeySession: null,
       sessionId: null,
@@ -45,6 +46,11 @@ export async function getWorkspacePageData(activeChatId?: string) {
         }
       : null,
     isSlackConnected: Boolean(slackSession?.slack_access_token),
+    slackSession: slackSession?.slack_access_token
+      ? {
+          teamName: slackSession.slack_team_name,
+        }
+      : null,
     linearApiKeyError,
     linearApiKeySession: linearApiKeySession
       ? {

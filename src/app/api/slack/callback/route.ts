@@ -15,6 +15,7 @@ type SlackUserAccessSuccessResponse = {
   };
   team?: {
     id?: string;
+    name?: string;
   };
 };
 
@@ -107,6 +108,7 @@ export async function GET(request: NextRequest) {
     sessionId,
     slackAccessToken: tokenExchangePayload.access_token,
     slackTeamId: tokenExchangePayload.team?.id ?? null,
+    slackTeamName: tokenExchangePayload.team?.name ?? null,
     slackUserId: tokenExchangePayload.authed_user?.id ?? null,
   });
 

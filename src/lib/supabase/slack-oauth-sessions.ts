@@ -9,6 +9,7 @@ export type SlackOAuthSession = {
   slack_access_token: string | null;
   slack_user_id: string | null;
   slack_team_id: string | null;
+  slack_team_name: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -60,12 +61,13 @@ export async function consumeSlackOAuthState(sessionId: string, oauthState: stri
   return consumedSessions[0] ?? null;
 }
 
-export async function saveSlackAccessToken({ sessionId, slackAccessToken, slackTeamId, slackUserId }: 
-  { sessionId: string; slackAccessToken: string; slackTeamId: string | null; slackUserId: string | null }) {
+export async function saveSlackAccessToken({ sessionId, slackAccessToken, slackTeamId, slackTeamName, slackUserId }: 
+  { sessionId: string; slackAccessToken: string; slackTeamId: string | null; slackTeamName: string | null; slackUserId: string | null }) {
   const updatedSessions = await supabaseRequest<SlackOAuthSession[]>({
     body: {
       slack_access_token: slackAccessToken,
       slack_team_id: slackTeamId,
+      slack_team_name: slackTeamName,
       slack_user_id: slackUserId,
     },
     method: "PATCH",

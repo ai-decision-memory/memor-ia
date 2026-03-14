@@ -13,6 +13,7 @@ export default async function Home() {
       isSlackConnected={pageData.isSlackConnected}
       linearApiKeyError={pageData.linearApiKeyError}
       linearApiKeySession={pageData.linearApiKeySession}
+      slackSession={pageData.slackSession}
     />
   );
 }

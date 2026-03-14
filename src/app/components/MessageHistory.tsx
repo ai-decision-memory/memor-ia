@@ -90,14 +90,14 @@ export function MessageHistory({ messages }: MessageHistoryProps) {
 
   if (messages.length === 0) {
     return (
-      <div className="flex flex-1 items-center justify-center text-sm text-text-muted">
+      <div className="flex h-full items-center justify-center text-sm text-text-muted">
         Start the conversation by sending your first message.
       </div>
     );
   }
 
   return (
-    <div ref={scrollRef} className="flex-1 overflow-y-auto pt-4 pb-10">
+    <div ref={scrollRef} className="h-full overflow-y-auto pt-4 pb-10">
       <div className="mx-auto max-w-[730px] space-y-5">
         {messages.map((message) => {
           const isUser = message.role === "user";
