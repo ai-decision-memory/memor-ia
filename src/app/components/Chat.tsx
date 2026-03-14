@@ -8,7 +8,7 @@ import { useChat } from "@ai-sdk/react";
 import { UIMessage } from "ai";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Composer } from "./Composer";
 import { MessageHistory } from "./MessageHistory";
 
@@ -173,6 +173,73 @@ function LinearModal({ onClose, serverError }: { onClose: () => void; serverErro
   );
 }
 
+function RenameChatModal({
+  currentTitle,
+  onClose,
+  onRename,
+}: {
+  currentTitle: string;
+  onClose: () => void;
+  onRename: (title: string) => void;
+}) {
+  const [title, setTitle] = useState(currentTitle);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.select();
+  }, []);
+
+  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    onRename(title);
+  };
+
+  return (
+    <ConnectionModal onClose={onClose}>
+      <p className="text-sm font-medium text-text-primary">Rename chat</p>
+      <form onSubmit={handleSubmit} className="mt-4 space-y-3">
+        <input
+          ref={inputRef}
+          type="text"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          className="w-full rounded-lg bg-page px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-muted"
+          autoFocus
+        />
+        <div className="flex items-center justify-end gap-3 pt-1">
+          <button type="button" onClick={onClose} className="text-xs text-text-muted hover:text-text-primary">Cancel</button>
+          <button type="submit" disabled={!title.trim()}
+            className="rounded-lg bg-accent px-4 py-1.5 text-xs font-medium text-accent-text transition hover:opacity-80 disabled:opacity-40">
+            Save
+          </button>
+        </div>
+      </form>
+    </ConnectionModal>
+  );
+}
+
+function DeleteChatModal({
+  onClose,
+  onConfirm,
+}: {
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <ConnectionModal onClose={onClose}>
+      <p className="text-sm font-medium text-text-primary">Delete chat</p>
+      <p className="mt-2 text-xs text-text-muted">This will permanently delete this chat and all its messages.</p>
+      <div className="mt-4 flex items-center justify-end gap-3">
+        <button type="button" onClick={onClose} className="text-xs text-text-muted hover:text-text-primary">Cancel</button>
+        <button type="button" onClick={onConfirm}
+          className="rounded-lg bg-red-500/20 px-4 py-1.5 text-xs font-medium text-red-400 transition hover:bg-red-500/30">
+          Delete
+        </button>
+      </div>
+    </ConnectionModal>
+  );
+}
+
 export const Chat = ({
   activeChat,
   chats,
@@ -205,13 +272,29 @@ export const Chat = ({
   const [clientError, setClientError] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [isCreatingChat, setIsCreatingChat] = useState(false);
-  const [isDeletingChatId, setIsDeletingChatId] = useState<string | null>(null);
   const [pendingInitialPrompt, setPendingInitialPrompt] = useState<string | null>(null);
   const [sidebarChats, setSidebarChats] = useState<ChatSummary[]>(chats);
   const [transientChat, setTransientChat] = useState<PersistedChat | null>(null);
+  const [chatMenuId, setChatMenuId] = useState<string | null>(null);
+  const chatMenuRef = useRef<HTMLDivElement>(null);
   const [openModal, setOpenModal] = useState<"github" | "linear" | null>(
     githubPatError ? "github" : linearApiKeyError ? "linear" : null,
   );
+  const [renamingChatId, setRenamingChatId] = useState<string | null>(null);
+  const [deletingConfirmChatId, setDeletingConfirmChatId] = useState<string | null>(null);
+
+  const closeChatMenu = useCallback(() => setChatMenuId(null), []);
+
+  useEffect(() => {
+    if (!chatMenuId) return;
+    const handleClick = (e: MouseEvent) => {
+      if (chatMenuRef.current && !chatMenuRef.current.contains(e.target as Node)) {
+        closeChatMenu();
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [chatMenuId, closeChatMenu]);
 
   const allConnected = isSlackConnected && !!githubPatSession && !!linearApiKeySession;
 
@@ -425,16 +508,16 @@ export const Chat = ({
   };
 
   const handleDeleteChat = async (chatId: string) => {
-    const confirmed = window.confirm(
-      "Delete this chat? Its saved messages will be removed."
+    setDeletingConfirmChatId(null);
+    setClientError(null);
+
+    setSidebarChats((currentChats) =>
+      currentChats.filter((chat) => chat.id !== chatId),
     );
 
-    if (!confirmed) {
-      return;
+    if (activeChatId === chatId) {
+      router.push("/");
     }
-
-    setClientError(null);
-    setIsDeletingChatId(chatId);
 
     try {
       const response = await fetch(`/api/chats/${chatId}`, {
@@ -444,23 +527,34 @@ export const Chat = ({
       if (!response.ok) {
         throw new Error((await response.text()) || "Failed to delete chat");
       }
-
-      setSidebarChats((currentChats) =>
-        currentChats.filter((chat) => chat.id !== chatId),
-      );
-
-      if (activeChatId === chatId) {
-        router.push("/");
-      }
     } catch (deleteError) {
       setClientError(
         deleteError instanceof Error
           ? deleteError.message
           : "Failed to delete chat",
       );
-    } finally {
-      setIsDeletingChatId(null);
     }
+  };
+
+  const handleRenameChat = (chatId: string, newTitle: string) => {
+    const chat = sidebarChats.find((c) => c.id === chatId);
+    setRenamingChatId(null);
+
+    if (!newTitle || newTitle.trim() === "" || newTitle === chat?.title) {
+      return;
+    }
+
+    const trimmedTitle = newTitle.trim();
+    updateSidebarChatTitle(chatId, trimmedTitle);
+
+    persistChatTitle({ chatId, title: trimmedTitle }).catch((renameError) => {
+      if (chat) updateSidebarChatTitle(chatId, chat.title);
+      setClientError(
+        renameError instanceof Error
+          ? renameError.message
+          : "Failed to rename chat",
+      );
+    });
   };
 
   return (
@@ -506,14 +600,42 @@ export const Chat = ({
                       {formatRelativeTimestamp(chat.updated_at)}
                     </p>
                   </Link>
-                  <button
-                    type="button"
-                    disabled={isDeletingChatId === chat.id}
-                    onClick={() => void handleDeleteChat(chat.id)}
-                    className="shrink-0 rounded px-1.5 py-0.5 text-xs text-text-muted transition hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    &times;
-                  </button>
+                  <div className="relative self-center shrink-0" ref={chatMenuId === chat.id ? chatMenuRef : undefined}>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setChatMenuId(chatMenuId === chat.id ? null : chat.id);
+                      }}
+                      className="flex h-6 w-6 items-center justify-center rounded text-sm leading-none text-text-muted transition hover:text-text-primary"
+                    >
+                      &#x22EF;
+                    </button>
+                    {chatMenuId === chat.id ? (
+                      <div className="absolute right-0 top-full z-10 mt-1 w-32 rounded-lg bg-page py-1 shadow-lg">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setChatMenuId(null);
+                            setRenamingChatId(chat.id);
+                          }}
+                          className="block w-full px-3 py-1.5 text-left text-xs text-text-secondary hover:text-text-primary"
+                        >
+                          Rename
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setChatMenuId(null);
+                            setDeletingConfirmChatId(chat.id);
+                          }}
+                          className="block w-full px-3 py-1.5 text-left text-xs text-red-400 hover:text-red-300"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               );
             })
@@ -610,6 +732,21 @@ export const Chat = ({
 
       {openModal === "github" ? <GitHubModal onClose={() => setOpenModal(null)} serverError={githubPatError} /> : null}
       {openModal === "linear" ? <LinearModal onClose={() => setOpenModal(null)} serverError={linearApiKeyError} /> : null}
+
+      {renamingChatId ? (
+        <RenameChatModal
+          currentTitle={sidebarChats.find((c) => c.id === renamingChatId)?.title ?? ""}
+          onClose={() => setRenamingChatId(null)}
+          onRename={(title) => handleRenameChat(renamingChatId, title)}
+        />
+      ) : null}
+
+      {deletingConfirmChatId ? (
+        <DeleteChatModal
+          onClose={() => setDeletingConfirmChatId(null)}
+          onConfirm={() => void handleDeleteChat(deletingConfirmChatId)}
+        />
+      ) : null}
     </div>
   );
 };
@@ -621,8 +758,15 @@ function formatRelativeTimestamp(timestamp: string) {
     return "Unknown time";
   }
 
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  return `${months}mo ago`;
 }
