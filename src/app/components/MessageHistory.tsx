@@ -1,3 +1,5 @@
+import { useEffect, useRef } from "react";
+
 type MessagePart = {
   type: string;
   [key: string]: unknown;
@@ -37,7 +39,7 @@ function renderPart(part: MessagePart, key: string) {
 
   if (part.type === "step-start") {
     return (
-      <div key={key} className="rounded-md border border-zinc-200 bg-zinc-100 px-2 py-1 text-xs">
+      <div key={key} className="rounded-md bg-surface-raised px-2 py-1 text-xs text-text-muted">
         New reasoning step
       </div>
     );
@@ -51,71 +53,81 @@ function renderPart(part: MessagePart, key: string) {
     const errorText = typeof part.errorText === "string" ? part.errorText : undefined;
 
     return (
-      <div key={key} className="rounded-md border border-sky-200 bg-sky-50 p-2 text-xs text-zinc-800">
-        <p className="font-semibold">
+      <div key={key} className="rounded-md bg-surface-raised p-2 text-xs text-text-secondary">
+        <p className="font-semibold text-text-primary">
           Tool: <span className="font-mono">{toolName}</span>
         </p>
         <p>State: {state}</p>
         {hasInput ? (
-          <pre className="mt-1 overflow-x-auto whitespace-pre-wrap rounded bg-white p-2">
+          <pre className="mt-1 overflow-x-auto whitespace-pre-wrap rounded bg-page p-2 text-text-muted">
             Input: {formatValue(part.input)}
           </pre>
         ) : null}
         {hasOutput ? (
-          <pre className="mt-1 overflow-x-auto whitespace-pre-wrap rounded bg-white p-2">
+          <pre className="mt-1 overflow-x-auto whitespace-pre-wrap rounded bg-page p-2 text-text-muted">
             Output: {formatValue(part.output)}
           </pre>
         ) : null}
-        {errorText ? <p className="mt-1 text-red-700">Error: {errorText}</p> : null}
+        {errorText ? <p className="mt-1 text-red-400">Error: {errorText}</p> : null}
       </div>
     );
   }
 
   return (
-    <p key={key} className="text-xs opacity-70">
+    <p key={key} className="text-xs text-text-muted">
       Unsupported part: [{part.type}]
     </p>
   );
 }
 
 export function MessageHistory({ messages }: MessageHistoryProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
   if (messages.length === 0) {
     return (
-      <div className="rounded-xl border border-zinc-200 bg-white p-4 text-sm text-zinc-500">
+      <div className="flex flex-1 items-center justify-center text-sm text-text-muted">
         Start the conversation by sending your first message.
       </div>
     );
   }
 
   return (
-    <div className="max-h-[460px] space-y-3 overflow-y-auto rounded-xl border border-zinc-200 bg-white p-4">
-      {messages.map((message) => {
-        const isUser = message.role === "user";
+    <div ref={scrollRef} className="flex-1 overflow-y-auto pt-4 pb-10">
+      <div className="mx-auto max-w-[730px] space-y-5">
+        {messages.map((message) => {
+          const isUser = message.role === "user";
 
-        return (
-          <div
-            key={message.id}
-            className={`flex ${isUser ? "justify-end" : "justify-start"}`}
-          >
-            <div
-              className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm shadow-sm ${
-                isUser
-                  ? "bg-zinc-900 text-white"
-                  : "border border-zinc-200 bg-zinc-50 text-zinc-900"
-              }`}
-            >
-              <p className="mb-1 text-xs font-semibold uppercase tracking-wide opacity-70">
-                {isUser ? "You" : "Assistant"}
-              </p>
-              <div className="space-y-1 whitespace-pre-wrap">
+          if (isUser) {
+            return (
+              <div key={message.id} className="flex justify-end">
+                <div className="max-w-[75%] rounded-2xl bg-sidebar px-4 py-3 text-sm text-text-primary">
+                  <div className="space-y-1 whitespace-pre-wrap">
+                    {message.parts.map((part, index) =>
+                      renderPart(part, `${message.id}-${index}`),
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div key={message.id} className="text-sm text-text-primary">
+              <div className="space-y-2 whitespace-pre-wrap">
                 {message.parts.map((part, index) =>
                   renderPart(part, `${message.id}-${index}`),
                 )}
               </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+        <div ref={bottomRef} />
+      </div>
     </div>
   );
 }

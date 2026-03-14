@@ -4,9 +4,21 @@ import {
 } from "@/lib/mcp/chat-tool-config";
 
 type ToolLike = {
+  description?: string;
   execute?: (input: unknown, options: unknown) => PromiseLike<unknown>;
   inputSchema?: unknown;
 } & Record<string, unknown>;
+
+function decorateGitHubTool(tool: ToolLike): ToolLike {
+  const description = tool.description?.trim();
+
+  return {
+    ...tool,
+    description: description
+      ? `GitHub repository tool. ${description}`
+      : "GitHub repository tool.",
+  };
+}
 
 function stripFieldsFromSchema(inputSchema: unknown, fieldsToRemove: string[]) {
   if (!inputSchema || typeof inputSchema !== "object") {
@@ -91,5 +103,10 @@ export function sanitizeGitHubToolsForChat<T extends Record<string, ToolLike>>(
     }
   }
 
-  return filteredTools as Pick<T, (typeof GITHUB_MCP_CHAT_TOOL_NAMES)[number]>;
+  return Object.fromEntries(
+    Object.entries(filteredTools).map(([toolName, tool]) => [
+      `github_${toolName}`,
+      decorateGitHubTool(tool),
+    ])
+  ) as Record<string, ToolLike>;
 }

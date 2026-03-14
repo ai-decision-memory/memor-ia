@@ -7,6 +7,10 @@ import { sanitizeLinearToolsForChat } from "@/lib/mcp/sanitize-linear-tools";
 import { createSlackMCPClient } from "@/lib/mcp/slack-mcp-client";
 import { sanitizeSlackToolsForChat } from "@/lib/mcp/sanitize-slack-tools";
 import { WORKSPACE_ASSISTANT_SYSTEM_PROMPT } from "@/lib/prompts/workspace-assistant-system-prompt";
+import {
+  getAgentChat,
+  updateAgentChatMessages,
+} from "@/lib/supabase/agent-chats";
 import { getGitHubPATSession } from "@/lib/supabase/github-pat-sessions";
 import { getLinearApiKeySession } from "@/lib/supabase/linear-api-key-sessions";
 import { getSlackOAuthSession } from "@/lib/supabase/slack-oauth-sessions";
@@ -47,7 +51,28 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "Linear API key not connected" }, { status: 401 });
   }
 
-  const { messages }: { messages: UIMessage[] } = await request.json();
+  const { id: chatId, messages }: { id?: string; messages: UIMessage[] } =
+    await request.json();
+
+  if (!chatId) {
+    return Response.json({ error: "Chat id is required" }, { status: 400 });
+  }
+
+  const chat = await getAgentChat({
+    chatId,
+    sessionId,
+  });
+
+  if (!chat) {
+    return Response.json({ error: "Chat not found" }, { status: 404 });
+  }
+
+  await updateAgentChatMessages({
+    chatId,
+    messages,
+    sessionId,
+  });
+
   const slackMCPClient = await createSlackMCPClient(slackSession.slack_access_token);
   const githubMCPClient = await createGitHubMCPClient(githubPatSession.github_pat);
   const linearMCPClient = await createLinearMCPClient(linearApiKeySession.linear_api_key);
@@ -66,7 +91,7 @@ export async function POST(request: NextRequest) {
   const githubChatTools = sanitizeGitHubToolsForChat(
     githubTools as Record<string, Record<string, unknown>>,
     githubPatSession.github_org_login
-  ) as unknown as typeof githubTools;
+  );
   const linearChatTools = sanitizeLinearToolsForChat(
     linearTools as Record<string, Record<string, unknown>>,
     {
@@ -74,7 +99,7 @@ export async function POST(request: NextRequest) {
       teamKey: linearApiKeySession.linear_team_key,
       teamName: linearApiKeySession.linear_team_name,
     }
-  ) as typeof linearTools;
+  );
   const githubOrgTools = createGitHubOrgTools({
     githubOrgLogin: githubPatSession.github_org_login,
     githubPersonalAccessToken: githubPatSession.github_pat,
@@ -108,7 +133,13 @@ export async function POST(request: NextRequest) {
   });
 
   return result.toUIMessageStreamResponse({
-    onFinish: async () => {
+    originalMessages: messages,
+    onFinish: async ({ messages: updatedMessages }) => {
+      await updateAgentChatMessages({
+        chatId,
+        messages: updatedMessages,
+        sessionId,
+      });
       await Promise.all([
         slackMCPClient.close(),
         githubMCPClient.close(),
