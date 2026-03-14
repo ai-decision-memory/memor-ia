@@ -1,9 +1,5 @@
 "use client";
 
-import {
-  buildChatTitleFromMessages,
-  DEFAULT_CHAT_TITLE,
-} from "@/lib/chats/title";
 import { useChat } from "@ai-sdk/react";
 import { UIMessage } from "ai";
 import Link from "next/link";
@@ -11,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Composer } from "./Composer";
 import { MessageHistory } from "./MessageHistory";
+import { TextScramble } from "./TextScramble";
 
 type ChatSummary = {
   created_at: string;
@@ -355,37 +352,7 @@ export const Chat = ({
   } = useChat<UIMessage>({
     id: activeChatId ?? NEW_CHAT_ID,
     messages: initialMessages,
-    onFinish: async ({ messages: finishedMessages }) => {
-      if (!activeChatId) {
-        return;
-      }
-
-      const currentChat = sidebarChats.find((chat) => chat.id === activeChatId);
-
-      if (!currentChat || currentChat.title !== DEFAULT_CHAT_TITLE) {
-        return;
-      }
-
-      const nextTitle = buildChatTitleFromMessages(finishedMessages);
-
-      if (nextTitle === DEFAULT_CHAT_TITLE) {
-        return;
-      }
-
-      try {
-        const updatedChat = await persistChatTitle({
-          chatId: activeChatId,
-          title: nextTitle,
-        });
-        updateSidebarChatTitle(updatedChat.id, updatedChat.title);
-      } catch (titleError) {
-        setClientError(
-          titleError instanceof Error
-            ? titleError.message
-            : "Failed to update chat title",
-        );
-      }
-    },
+    onFinish: async () => {},
   });
 
   useEffect(() => {
@@ -595,7 +562,9 @@ export const Chat = ({
                     href={`/chats/${chat.id}`}
                     className="min-w-0 flex-1"
                   >
-                    <p className="truncate text-sm">{chat.title}</p>
+                    <p className="truncate text-sm">
+                      <TextScramble>{chat.title}</TextScramble>
+                    </p>
                     <p className="mt-0.5 text-xs text-text-muted">
                       {formatRelativeTimestamp(chat.updated_at)}
                     </p>

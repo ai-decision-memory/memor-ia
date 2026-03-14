@@ -1,4 +1,4 @@
-import { buildChatTitleFromPrompt } from "@/lib/chats/title";
+import { DEFAULT_CHAT_TITLE } from "@/lib/chats/title";
 import { createAgentChat, getAgentChats } from "@/lib/supabase/agent-chats";
 import { NextRequest } from "next/server";
 
@@ -20,8 +20,8 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "Session not found" }, { status: 401 });
   }
 
-  const { firstMessageText }: { firstMessageText?: string } = await request.json();
-  const title = buildChatTitleFromPrompt(firstMessageText ?? "");
+  await request.json();
+  const title = DEFAULT_CHAT_TITLE;
   const chat = await createAgentChat({
     sessionId,
     title,
