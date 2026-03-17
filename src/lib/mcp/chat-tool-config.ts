@@ -1,15 +1,3 @@
-export const SLACK_MCP_CHAT_TOOL_NAMES = [
-  "slack_read_channel",
-  "slack_read_thread",
-] as const;
-
-export const SLACK_LOCAL_CHAT_TOOL_NAMES = [
-  "slack_get_connected_workspace",
-  "slack_list_workspace_members",
-  "slack_list_channels",
-  "slack_search_workspace_context",
-] as const;
-
 export const GITHUB_MCP_CHAT_TOOL_NAMES = [
   "get_file_contents",
   "list_branches",

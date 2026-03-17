@@ -1,11 +1,8 @@
-import { createSlackWorkspaceTools } from "@/lib/slack/workspace-tools";
 import { createGitHubOrgTools } from "@/lib/github/org-tools";
 import { createGitHubMCPClient } from "@/lib/mcp/github-mcp-client";
 import { createLinearMCPClient } from "@/lib/mcp/linear-mcp-client";
 import { sanitizeGitHubToolsForChat } from "@/lib/mcp/sanitize-github-tools";
 import { sanitizeLinearToolsForChat } from "@/lib/mcp/sanitize-linear-tools";
-import { createSlackMCPClient } from "@/lib/mcp/slack-mcp-client";
-import { sanitizeSlackToolsForChat } from "@/lib/mcp/sanitize-slack-tools";
 import { WORKSPACE_ASSISTANT_SYSTEM_PROMPT } from "@/lib/prompts/workspace-assistant-system-prompt";
 import {
   getAgentChat,
@@ -13,7 +10,6 @@ import {
 } from "@/lib/supabase/agent-chats";
 import { getGitHubPATSession } from "@/lib/supabase/github-pat-sessions";
 import { getLinearApiKeySession } from "@/lib/supabase/linear-api-key-sessions";
-import { getSlackOAuthSession } from "@/lib/supabase/slack-oauth-sessions";
 import { openai } from "@ai-sdk/openai";
 import {
   convertToModelMessages,
@@ -28,20 +24,15 @@ export async function POST(request: NextRequest) {
 
   if (!sessionId) {
     return Response.json(
-      { error: "Slack workspace, GitHub PAT, and Linear API key are not connected" },
+      { error: "GitHub PAT and Linear API key are not connected" },
       { status: 401 }
     );
   }
 
-  const [slackSession, githubPatSession, linearApiKeySession] = await Promise.all([
-    getSlackOAuthSession(sessionId),
+  const [githubPatSession, linearApiKeySession] = await Promise.all([
     getGitHubPATSession(sessionId),
     getLinearApiKeySession(sessionId),
   ]);
-
-  if (!slackSession?.slack_access_token) {
-    return Response.json({ error: "Slack workspace not connected" }, { status: 401 });
-  }
 
   if (!githubPatSession?.github_pat) {
     return Response.json({ error: "GitHub PAT not connected" }, { status: 401 });
@@ -73,21 +64,13 @@ export async function POST(request: NextRequest) {
     sessionId,
   });
 
-  const slackMCPClient = await createSlackMCPClient(slackSession.slack_access_token);
   const githubMCPClient = await createGitHubMCPClient(githubPatSession.github_pat);
   const linearMCPClient = await createLinearMCPClient(linearApiKeySession.linear_api_key);
-  const [slackTools, githubTools, linearTools] = await Promise.all([
-    slackMCPClient.tools(),
+  const [githubTools, linearTools] = await Promise.all([
     githubMCPClient.tools(),
     linearMCPClient.tools(),
   ]);
 
-  const slackChatTools = sanitizeSlackToolsForChat(
-    slackTools as Record<string, Record<string, unknown>>
-  ) as typeof slackTools;
-  const slackWorkspaceTools = createSlackWorkspaceTools({
-    slackToken: slackSession.slack_access_token,
-  });
   const githubChatTools = sanitizeGitHubToolsForChat(
     githubTools as Record<string, Record<string, unknown>>,
     githubPatSession.github_org_login
@@ -106,16 +89,12 @@ export async function POST(request: NextRequest) {
     githubUserLogin: githubPatSession.github_user_login,
   });
   const tools = {
-    ...slackChatTools,
-    ...slackWorkspaceTools,
     ...githubChatTools,
     ...linearChatTools,
     ...githubOrgTools,
   };
   const systemPrompt = [
     WORKSPACE_ASSISTANT_SYSTEM_PROMPT,
-    `Connected Slack workspace user ID: ${slackSession.slack_user_id}.`,
-    `Connected Slack workspace team ID: ${slackSession.slack_team_id}.`,
     `Connected GitHub organization: ${githubPatSession.github_org_login}.`,
     `Connected GitHub user: ${githubPatSession.github_user_login}.`,
     `Connected Linear team: ${linearApiKeySession.linear_team_key} (${linearApiKeySession.linear_team_name}).`,
@@ -141,7 +120,6 @@ export async function POST(request: NextRequest) {
         sessionId,
       });
       await Promise.all([
-        slackMCPClient.close(),
         githubMCPClient.close(),
         linearMCPClient.close(),
       ]);

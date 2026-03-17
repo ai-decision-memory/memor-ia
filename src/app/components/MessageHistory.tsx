@@ -26,10 +26,6 @@ function getToolProviderLabel(toolName: string) {
     return "GitHub";
   }
 
-  if (toolName.startsWith("slack_")) {
-    return "Slack";
-  }
-
   return null;
 }
 

@@ -2,7 +2,6 @@ import "server-only";
 import { getAgentChat, getAgentChats } from "@/lib/supabase/agent-chats";
 import { getGitHubPATSession } from "@/lib/supabase/github-pat-sessions";
 import { getLinearApiKeySession } from "@/lib/supabase/linear-api-key-sessions";
-import { getSlackOAuthSession } from "@/lib/supabase/slack-oauth-sessions";
 import { cookies } from "next/headers";
 
 export async function getWorkspacePageData(activeChatId?: string) {
@@ -17,8 +16,6 @@ export async function getWorkspacePageData(activeChatId?: string) {
       activeChat: null,
       githubPatError,
       githubPatSession: null,
-      isSlackConnected: false,
-      slackSession: null,
       linearApiKeyError,
       linearApiKeySession: null,
       sessionId: null,
@@ -26,9 +23,8 @@ export async function getWorkspacePageData(activeChatId?: string) {
     };
   }
 
-  const [slackSession, githubPatSession, linearApiKeySession, chats, activeChat] =
+  const [githubPatSession, linearApiKeySession, chats, activeChat] =
     await Promise.all([
-      getSlackOAuthSession(sessionId),
       getGitHubPATSession(sessionId),
       getLinearApiKeySession(sessionId),
       getAgentChats(sessionId),
@@ -43,12 +39,6 @@ export async function getWorkspacePageData(activeChatId?: string) {
       ? {
           orgLogin: githubPatSession.github_org_login,
           userLogin: githubPatSession.github_user_login,
-        }
-      : null,
-    isSlackConnected: Boolean(slackSession?.slack_access_token),
-    slackSession: slackSession?.slack_access_token
-      ? {
-          teamName: slackSession.slack_team_name,
         }
       : null,
     linearApiKeyError,

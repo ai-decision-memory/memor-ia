@@ -10,10 +10,8 @@ export default async function Home() {
       chats={pageData.chats}
       githubPatError={pageData.githubPatError}
       githubPatSession={pageData.githubPatSession}
-      isSlackConnected={pageData.isSlackConnected}
       linearApiKeyError={pageData.linearApiKeyError}
       linearApiKeySession={pageData.linearApiKeySession}
-      slackSession={pageData.slackSession}
     />
   );
 }

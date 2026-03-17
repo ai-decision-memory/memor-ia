@@ -242,10 +242,8 @@ export const Chat = ({
   chats,
   githubPatError,
   githubPatSession,
-  isSlackConnected,
   linearApiKeyError,
   linearApiKeySession,
-  slackSession,
 }: {
   activeChat: PersistedChat | null;
   chats: ChatSummary[];
@@ -254,15 +252,11 @@ export const Chat = ({
     orgLogin: string;
     userLogin: string;
   } | null;
-  isSlackConnected: boolean;
   linearApiKeyError: string | null;
   linearApiKeySession: {
     teamKey: string;
     teamName: string;
     userName: string;
-  } | null;
-  slackSession: {
-    teamName: string | null;
   } | null;
 }) => {
   const router = useRouter();
@@ -293,7 +287,7 @@ export const Chat = ({
     return () => document.removeEventListener("mousedown", handleClick);
   }, [chatMenuId, closeChatMenu]);
 
-  const allConnected = isSlackConnected && !!githubPatSession && !!linearApiKeySession;
+  const allConnected = !!githubPatSession && !!linearApiKeySession;
 
   const resolvedActiveChat = transientChat ?? activeChat;
   const activeChatId = resolvedActiveChat?.id ?? null;
@@ -615,21 +609,6 @@ export const Chat = ({
           <div className="grid grid-rows-[0fr] transition-[grid-template-rows] duration-300 ease-in-out group-hover:grid-rows-[1fr]">
             <div className="overflow-hidden">
               <div className="space-y-2.5 px-3 pt-3 pb-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <StatusDot connected={isSlackConnected} />
-                    <p className="text-xs font-medium text-text-primary">Slack</p>
-                  </div>
-                  {isSlackConnected ? (
-                    <div className="flex items-center gap-2">
-                      <p className="text-xs text-text-muted">{slackSession?.teamName ?? "Connected"}</p>
-                      <a href="/api/slack/connect" className="text-xs text-text-muted hover:text-text-primary">(reconnect)</a>
-                    </div>
-                  ) : (
-                    <a href="/api/slack/connect" className="text-xs font-medium text-accent hover:underline">Connect</a>
-                  )}
-                </div>
-
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <StatusDot connected={!!githubPatSession} />
