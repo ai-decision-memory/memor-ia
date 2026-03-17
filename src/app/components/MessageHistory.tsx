@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { TextShimmer } from "./TextShimmer";
 
 type MessagePart = {
   type: string;
@@ -13,22 +14,144 @@ type ChatMessage = {
 
 type MessageHistoryProps = {
   messages: ChatMessage[];
+  status: string;
 };
 
-function formatValue(value: unknown) {
-  if (value == null) {
-    return "none";
+function getToolProviderLabel(toolName: string) {
+  if (toolName.startsWith("linear_")) {
+    return "Linear";
   }
 
-  if (typeof value === "string") {
+  if (toolName.startsWith("github_")) {
+    return "GitHub";
+  }
+
+  if (toolName.startsWith("slack_")) {
+    return "Slack";
+  }
+
+  return null;
+}
+
+function splitToolName(toolName: string) {
+  const provider = getToolProviderLabel(toolName);
+  const normalizedName = provider ? toolName.slice(provider.length + 1) : toolName;
+  const [action = "use", ...subjectParts] = normalizedName.split("_");
+
+  return {
+    action,
+    provider,
+    subjectParts,
+  };
+}
+
+function humanizeSubject(toolName: string) {
+  const { provider, subjectParts } = splitToolName(toolName);
+  const formattedProvider = provider ? `${provider} ` : "";
+  const subject = subjectParts
+    .map((part) => {
+      if (part === "org") {
+        return "organization";
+      }
+
+      if (part === "repo") {
+        return "repository";
+      }
+
+      return part;
+    })
+    .join(" ")
+    .trim();
+
+  return `${formattedProvider}${subject || "tool"}`.trim();
+}
+
+function truncateInlineValue(value: string) {
+  if (value.length <= 80) {
     return value;
   }
 
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
+  return `${value.slice(0, 77).trimEnd()}...`;
+}
+
+function summarizeToolInput(input: unknown) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return "";
   }
+
+  const record = input as Record<string, unknown>;
+
+  for (const key of ["query", "q", "question", "prompt", "repo", "repository", "project", "team"]) {
+    if (typeof record[key] === "string" && record[key].trim()) {
+      return ` for ${truncateInlineValue(record[key].trim())}`;
+    }
+  }
+
+  return "";
+}
+
+function getActionLabels(action: string) {
+  switch (action) {
+    case "search":
+      return { continuous: "Searching", past: "Searched", infinitive: "search" };
+    case "list":
+      return { continuous: "Listing", past: "Listed", infinitive: "list" };
+    case "get":
+      return { continuous: "Getting", past: "Got", infinitive: "get" };
+    case "read":
+      return { continuous: "Reading", past: "Read", infinitive: "read" };
+    case "find":
+      return { continuous: "Finding", past: "Found", infinitive: "find" };
+    case "query":
+      return { continuous: "Querying", past: "Queried", infinitive: "query" };
+    case "create":
+      return { continuous: "Creating", past: "Created", infinitive: "create" };
+    case "update":
+      return { continuous: "Updating", past: "Updated", infinitive: "update" };
+    default:
+      return { continuous: "Using", past: "Used", infinitive: "use" };
+  }
+}
+
+function buildToolActivityLabel(part: MessagePart) {
+  const toolName = typeof part.toolName === "string" ? part.toolName : "unknown";
+  const state = typeof part.state === "string" ? part.state : "unknown";
+  const { action } = splitToolName(toolName);
+  const subject = humanizeSubject(toolName);
+  const qualifier = summarizeToolInput(part.input);
+  const labels = getActionLabels(action);
+
+  if (state === "output-error") {
+    return `Failed to ${labels.infinitive} ${subject}${qualifier}`;
+  }
+
+  if (state === "output-available") {
+    return `${labels.past} ${subject}${qualifier}`;
+  }
+
+  return `${labels.continuous} ${subject}${qualifier}`;
+}
+
+function isCompletedToolState(state: string) {
+  return state === "output-available" || state === "output-error";
+}
+
+function hasVisibleAssistantContent(message: ChatMessage) {
+  if (message.role !== "assistant") {
+    return false;
+  }
+
+  return message.parts.some((part) => {
+    if (part.type === "dynamic-tool") {
+      return true;
+    }
+
+    if (part.type === "text") {
+      return typeof part.text === "string" && part.text.trim().length > 0;
+    }
+
+    return false;
+  });
 }
 
 function renderPart(part: MessagePart, key: string) {
@@ -38,55 +161,107 @@ function renderPart(part: MessagePart, key: string) {
   }
 
   if (part.type === "step-start") {
-    return (
-      <div key={key} className="rounded-md bg-surface-raised px-2 py-1 text-xs text-text-muted">
-        New reasoning step
-      </div>
-    );
+    return null;
   }
 
   if (part.type === "dynamic-tool") {
-    const toolName = typeof part.toolName === "string" ? part.toolName : "unknown";
     const state = typeof part.state === "string" ? part.state : "unknown";
-    const hasInput = "input" in part;
-    const hasOutput = "output" in part;
-    const errorText = typeof part.errorText === "string" ? part.errorText : undefined;
+    const label = buildToolActivityLabel(part);
+    const isCompleted = isCompletedToolState(state);
 
     return (
-      <div key={key} className="rounded-md bg-surface-raised p-2 text-xs text-text-secondary">
-        <p className="font-semibold text-text-primary">
-          Tool: <span className="font-mono">{toolName}</span>
-        </p>
-        <p>State: {state}</p>
-        {hasInput ? (
-          <pre className="mt-1 overflow-x-auto whitespace-pre-wrap rounded bg-page p-2 text-text-muted">
-            Input: {formatValue(part.input)}
-          </pre>
-        ) : null}
-        {hasOutput ? (
-          <pre className="mt-1 overflow-x-auto whitespace-pre-wrap rounded bg-page p-2 text-text-muted">
-            Output: {formatValue(part.output)}
-          </pre>
-        ) : null}
-        {errorText ? <p className="mt-1 text-red-400">Error: {errorText}</p> : null}
+      <div key={key} className="text-sm text-text-muted/80">
+        {isCompleted ? (
+          <span
+            className={
+              state === "output-error" ? "block text-red-400" : "block"
+            }
+          >
+            {label}
+          </span>
+        ) : (
+          <TextShimmer className="block">{label}</TextShimmer>
+        )}
       </div>
     );
   }
 
-  return (
-    <p key={key} className="text-xs text-text-muted">
-      Unsupported part: [{part.type}]
-    </p>
-  );
+  return null;
 }
 
-export function MessageHistory({ messages }: MessageHistoryProps) {
+export function MessageHistory({ messages, status }: MessageHistoryProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const loggedToolCallsRef = useRef<Set<string>>(new Set());
+  const isBusy = status === "submitted" || status === "streaming";
+  const lastUserMessageIndex = messages.findLastIndex(
+    (message) => message.role === "user"
+  );
+  const hasVisibleAssistantContentAfterLastUser =
+    lastUserMessageIndex >= 0 &&
+    messages
+      .slice(lastUserMessageIndex + 1)
+      .some((message) => hasVisibleAssistantContent(message));
+  const showPendingResponse =
+    isBusy &&
+    lastUserMessageIndex >= 0 &&
+    !hasVisibleAssistantContentAfterLastUser;
+
+  useEffect(() => {
+    for (const message of messages) {
+      for (let index = 0; index < message.parts.length; index += 1) {
+        const part = message.parts[index];
+
+        if (part.type !== "dynamic-tool") {
+          continue;
+        }
+
+        const toolName =
+          typeof part.toolName === "string" ? part.toolName : "unknown";
+        const state = typeof part.state === "string" ? part.state : "unknown";
+        const toolCallId =
+          typeof part.toolCallId === "string"
+            ? part.toolCallId
+            : `${message.id}-${toolName}-${index}`;
+
+        if (!isCompletedToolState(state)) {
+          continue;
+        }
+
+        if (loggedToolCallsRef.current.has(toolCallId)) {
+          continue;
+        }
+
+        loggedToolCallsRef.current.add(toolCallId);
+        const summary = buildToolActivityLabel(part);
+        const consoleMethod =
+          state === "output-error"
+            ? console.error
+            : console.info;
+
+        consoleMethod(`[tool] ${summary}`, {
+          input: "input" in part ? part.input : undefined,
+          output: "output" in part ? part.output : undefined,
+          state,
+          toolCallId,
+          toolName,
+        });
+
+        if (typeof part.errorText === "string") {
+          console.error(`[tool] ${summary}`, {
+            error: part.errorText,
+            state,
+            toolCallId,
+            toolName,
+          });
+        }
+      }
+    }
+  }, [messages]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, showPendingResponse]);
 
   if (messages.length === 0) {
     return (
@@ -126,6 +301,11 @@ export function MessageHistory({ messages }: MessageHistoryProps) {
             </div>
           );
         })}
+        {showPendingResponse ? (
+          <div className="text-sm text-text-muted/80">
+            <TextShimmer className="block">Generating response</TextShimmer>
+          </div>
+        ) : null}
         <div ref={bottomRef} />
       </div>
     </div>

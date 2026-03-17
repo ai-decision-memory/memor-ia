@@ -673,7 +673,7 @@ export const Chat = ({
 
       <main className="flex min-h-0 flex-1 flex-col rounded-2xl bg-page p-4 lg:my-3 lg:mr-3 lg:p-6">
         <div className="min-h-0 flex-1">
-          <MessageHistory messages={messages} />
+          <MessageHistory messages={messages} status={displayedStatus} />
         </div>
 
         {clientError ? (

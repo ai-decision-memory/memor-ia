@@ -17,6 +17,19 @@ type LinearTeamScope = {
   teamName: string;
 };
 
+export type LinearToolInspection = {
+  allowed: boolean;
+  blockedPatterns: string[];
+  description: string | null;
+  exposedToolName: string | null;
+  isMemberTool: boolean;
+  matchedActions: string[];
+  matchedSubjects: string[];
+  scopedFieldValues: Partial<Record<keyof typeof LINEAR_TEAM_FIELD_VALUES, string>>;
+  scopedFields: Array<keyof typeof LINEAR_TEAM_FIELD_VALUES>;
+  toolName: string;
+};
+
 const LINEAR_TEAM_FIELD_VALUES = {
   team: (scope: LinearTeamScope) => scope.teamKey,
   teamId: (scope: LinearTeamScope) => scope.teamId,
@@ -187,6 +200,12 @@ function matchesAnyPattern(value: string, patterns: readonly RegExp[]) {
   return patterns.some((pattern) => pattern.test(value));
 }
 
+function getMatchingPatterns(value: string, patterns: readonly RegExp[]) {
+  return patterns
+    .filter((pattern) => pattern.test(value))
+    .map((pattern) => pattern.toString());
+}
+
 function isLinearMemberTool(searchText: string) {
   return (
     matchesAnyPattern(searchText, LINEAR_MEMBER_USER_PATTERNS) &&
@@ -208,6 +227,62 @@ function isAllowedLinearTool(toolName: string, tool: ToolLike) {
   return (
     matchesAnyPattern(searchText, LINEAR_ALLOWED_ACTION_PATTERNS) &&
     matchesAnyPattern(searchText, LINEAR_ALLOWED_SUBJECT_PATTERNS)
+  );
+}
+
+export function inspectLinearTool(
+  toolName: string,
+  tool: ToolLike,
+  scope: LinearTeamScope
+): LinearToolInspection {
+  const searchText = [toolName, tool.description ?? ""].join(" ");
+  const blockedPatterns = getMatchingPatterns(searchText, LINEAR_BLOCKED_PATTERNS);
+  const matchedActions = getMatchingPatterns(
+    searchText,
+    LINEAR_ALLOWED_ACTION_PATTERNS
+  );
+  const matchedSubjects = getMatchingPatterns(
+    searchText,
+    LINEAR_ALLOWED_SUBJECT_PATTERNS
+  );
+  const isMemberTool = isLinearMemberTool(searchText);
+  const scopedFields = getScopedFieldNames(tool.inputSchema);
+
+  return {
+    allowed:
+      blockedPatterns.length === 0 &&
+      (isMemberTool
+        ? matchedActions.length > 0
+        : matchedActions.length > 0 && matchedSubjects.length > 0),
+    blockedPatterns,
+    description: tool.description?.trim() ?? null,
+    exposedToolName:
+      blockedPatterns.length === 0 &&
+      (isMemberTool
+        ? matchedActions.length > 0
+        : matchedActions.length > 0 && matchedSubjects.length > 0)
+        ? `linear_${toolName}`
+        : null,
+    isMemberTool,
+    matchedActions,
+    matchedSubjects,
+    scopedFieldValues: Object.fromEntries(
+      scopedFields.map((fieldName) => [
+        fieldName,
+        LINEAR_TEAM_FIELD_VALUES[fieldName](scope),
+      ])
+    ) as Partial<Record<keyof typeof LINEAR_TEAM_FIELD_VALUES, string>>,
+    scopedFields,
+    toolName,
+  };
+}
+
+export function inspectLinearToolsForChat<T extends Record<string, ToolLike>>(
+  tools: T,
+  scope: LinearTeamScope
+) {
+  return Object.entries(tools).map(([toolName, tool]) =>
+    inspectLinearTool(toolName, tool, scope)
   );
 }
 

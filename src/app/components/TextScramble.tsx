@@ -12,6 +12,7 @@ export function TextScramble({
   characterSet = DEFAULT_CHARS,
   className,
   trigger = true,
+  animateOnMount = false,
 }: {
   children: string;
   duration?: number;
@@ -19,30 +20,30 @@ export function TextScramble({
   characterSet?: string;
   className?: string;
   trigger?: boolean;
+  animateOnMount?: boolean;
 }) {
   const [displayText, setDisplayText] = useState(children);
-  const prevText = useRef(children);
-  const isAnimating = useRef(false);
+  const prevText = useRef(animateOnMount ? "" : children);
+  const shouldAnimateOnMount = useRef(animateOnMount);
 
   useEffect(() => {
-    if (!trigger || isAnimating.current) {
+    const shouldAnimate =
+      trigger && (shouldAnimateOnMount.current || children !== prevText.current);
+
+    prevText.current = children;
+    shouldAnimateOnMount.current = false;
+
+    if (!shouldAnimate) {
       prevText.current = children;
       setDisplayText(children);
       return;
     }
 
-    if (children === prevText.current) {
-      return;
-    }
-
-    prevText.current = children;
-    isAnimating.current = true;
-
     const text = children;
-    const steps = duration / speed;
+    const steps = Math.max(1, Math.ceil(duration / speed));
     let step = 0;
 
-    const interval = setInterval(() => {
+    const updateDisplayText = () => {
       let scrambled = "";
       const progress = step / steps;
 
@@ -61,17 +62,24 @@ export function TextScramble({
       }
 
       setDisplayText(scrambled);
-      step++;
+    };
+
+    updateDisplayText();
+
+    const interval = window.setInterval(() => {
+      step += 1;
 
       if (step > steps) {
         clearInterval(interval);
         setDisplayText(text);
-        isAnimating.current = false;
+        return;
       }
+
+      updateDisplayText();
     }, speed * 1000);
 
     return () => clearInterval(interval);
-  }, [children, trigger, duration, speed, characterSet]);
+  }, [animateOnMount, characterSet, children, duration, speed, trigger]);
 
   return <span className={className}>{displayText}</span>;
 }
