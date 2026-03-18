@@ -19,6 +19,8 @@ import {
 } from "ai";
 import { NextRequest } from "next/server";
 
+const TEMP_CHAT_ID_PREFIX = "temp-chat-";
+
 export async function POST(request: NextRequest) {
   const sessionId = request.cookies.get("session_id")?.value;
 
@@ -44,25 +46,24 @@ export async function POST(request: NextRequest) {
 
   const { id: chatId, messages }: { id?: string; messages: UIMessage[] } =
     await request.json();
+  const isTemporaryChat = !chatId || chatId.startsWith(TEMP_CHAT_ID_PREFIX);
 
-  if (!chatId) {
-    return Response.json({ error: "Chat id is required" }, { status: 400 });
+  if (!isTemporaryChat) {
+    const chat = await getAgentChat({
+      chatId,
+      sessionId,
+    });
+
+    if (!chat) {
+      return Response.json({ error: "Chat not found" }, { status: 404 });
+    }
+
+    await updateAgentChatMessages({
+      chatId,
+      messages,
+      sessionId,
+    });
   }
-
-  const chat = await getAgentChat({
-    chatId,
-    sessionId,
-  });
-
-  if (!chat) {
-    return Response.json({ error: "Chat not found" }, { status: 404 });
-  }
-
-  await updateAgentChatMessages({
-    chatId,
-    messages,
-    sessionId,
-  });
 
   const githubMCPClient = await createGitHubMCPClient(githubPatSession.github_pat);
   const linearMCPClient = await createLinearMCPClient(linearApiKeySession.linear_api_key);
@@ -114,11 +115,14 @@ export async function POST(request: NextRequest) {
   return result.toUIMessageStreamResponse({
     originalMessages: messages,
     onFinish: async ({ messages: updatedMessages }) => {
-      await updateAgentChatMessages({
-        chatId,
-        messages: updatedMessages,
-        sessionId,
-      });
+      if (!isTemporaryChat) {
+        await updateAgentChatMessages({
+          chatId,
+          messages: updatedMessages,
+          sessionId,
+        });
+      }
+
       await Promise.all([
         githubMCPClient.close(),
         linearMCPClient.close(),
