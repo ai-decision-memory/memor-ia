@@ -1,10 +1,13 @@
 "use client";
 
+import { buildChatTitleFromMessages } from "@/lib/chats/title";
 import { useChat } from "@ai-sdk/react";
-import { UIMessage } from "ai";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { UIMessage } from "ai";
+import { useChatWorkspace } from "./ChatWorkspaceProvider";
+import type { TemporaryChat } from "./ChatWorkspaceProvider";
 import { Composer } from "./Composer";
 import { MessageHistory } from "./MessageHistory";
 import { TextScramble } from "./TextScramble";
@@ -21,6 +24,20 @@ type PersistedChat = ChatSummary & {
 };
 
 const NEW_CHAT_ID = "new-chat";
+const TEMP_CHAT_ID_PREFIX = "temp-chat-";
+const TEMPORARY_CHAT_TITLE = "Temporary chat";
+
+function createTemporaryChat(): TemporaryChat {
+  const now = new Date().toISOString();
+
+  return {
+    created_at: now,
+    id: `${TEMP_CHAT_ID_PREFIX}${crypto.randomUUID()}`,
+    messages: [],
+    title: TEMPORARY_CHAT_TITLE,
+    updated_at: now,
+  };
+}
 
 function StatusDot({ connected }: { connected: boolean }) {
   return (
@@ -260,12 +277,15 @@ export const Chat = ({
   } | null;
 }) => {
   const router = useRouter();
+  const { clearTemporaryChat, setTemporaryChat, temporaryChat } = useChatWorkspace();
   const [clientError, setClientError] = useState<string | null>(null);
   const [input, setInput] = useState("");
-  const [isCreatingChat, setIsCreatingChat] = useState(false);
+  const [isPersistingChat, setIsPersistingChat] = useState(false);
+  const [isStartingTemporaryChat, setIsStartingTemporaryChat] = useState(false);
   const [pendingInitialPrompt, setPendingInitialPrompt] = useState<string | null>(null);
   const [sidebarChats, setSidebarChats] = useState<ChatSummary[]>(chats);
-  const [transientChat, setTransientChat] = useState<PersistedChat | null>(null);
+  const [transientPersistedChat, setTransientPersistedChat] =
+    useState<PersistedChat | null>(null);
   const [chatMenuId, setChatMenuId] = useState<string | null>(null);
   const chatMenuRef = useRef<HTMLDivElement>(null);
   const [openModal, setOpenModal] = useState<"github" | "linear" | null>(
@@ -289,13 +309,16 @@ export const Chat = ({
 
   const allConnected = !!githubPatSession && !!linearApiKeySession;
 
-  const resolvedActiveChat = transientChat ?? activeChat;
+  const activePersistedChat = transientPersistedChat ?? activeChat;
+  const resolvedActiveChat = activePersistedChat ?? temporaryChat;
+  const isTemporaryChatActive = !activePersistedChat && !!temporaryChat;
   const activeChatId = resolvedActiveChat?.id ?? null;
   const initialMessages = useMemo(
     () => resolvedActiveChat?.messages ?? [],
     [resolvedActiveChat?.messages],
   );
-  const chatStatus = isCreatingChat ? "submitted" : undefined;
+  const chatStatus =
+    isPersistingChat || isStartingTemporaryChat ? "submitted" : undefined;
 
   const updateSidebarChatTitle = (chatId: string, title: string) => {
     setSidebarChats((currentChats) =>
@@ -355,9 +378,38 @@ export const Chat = ({
 
   useEffect(() => {
     if (activeChat?.id) {
-      setTransientChat(null);
+      setTransientPersistedChat(null);
     }
   }, [activeChat?.id]);
+
+  useEffect(() => {
+    if (!temporaryChat || activeChatId !== temporaryChat.id) {
+      return;
+    }
+
+    setTemporaryChat((currentChat) => {
+      if (!currentChat || currentChat.id !== temporaryChat.id) {
+        return currentChat;
+      }
+
+      const nextTitle =
+        messages.length > 0
+          ? buildChatTitleFromMessages(messages)
+          : currentChat.title;
+      const didMessagesChange = currentChat.messages !== messages;
+
+      if (!didMessagesChange && currentChat.title === nextTitle) {
+        return currentChat;
+      }
+
+      return {
+        ...currentChat,
+        messages,
+        title: nextTitle,
+        updated_at: didMessagesChange ? new Date().toISOString() : currentChat.updated_at,
+      };
+    });
+  }, [activeChatId, messages, setTemporaryChat, temporaryChat]);
 
   useEffect(() => {
     if (
@@ -375,13 +427,20 @@ export const Chat = ({
   }, [activeChatId, messages.length, pendingInitialPrompt, sendMessage, status]);
 
   const displayedStatus = chatStatus ?? status;
+  const canPersistTemporaryChat =
+    isTemporaryChatActive &&
+    messages.length > 0 &&
+    displayedStatus !== "streaming" &&
+    displayedStatus !== "submitted" &&
+    !isPersistingChat;
 
   const resetDraftState = () => {
     stop();
     setClientError(null);
     setInput("");
     setPendingInitialPrompt(null);
-    setTransientChat(null);
+    clearTemporaryChat();
+    setTransientPersistedChat(null);
     setMessages([]);
   };
 
@@ -410,13 +469,22 @@ export const Chat = ({
     });
   };
 
-  const handleCreateChat = async (firstMessageText: string) => {
+  const handleCreateChat = async ({
+    messages: nextMessages,
+    title,
+  }: {
+    messages?: UIMessage[];
+    title?: string;
+  } = {}) => {
     const response = await fetch("/api/chats", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ firstMessageText }),
+      body: JSON.stringify({
+        ...(Array.isArray(nextMessages) ? { messages: nextMessages } : {}),
+        ...(title ? { title } : {}),
+      }),
     });
 
     if (!response.ok) {
@@ -433,38 +501,70 @@ export const Chat = ({
   const handleSendMessage = async ({ text }: { text: string }) => {
     setClientError(null);
 
-    if (activeChatId) {
-      moveChatToTop(activeChatId);
+    if (activePersistedChat?.id) {
+      moveChatToTop(activePersistedChat.id);
       await sendMessage({ text });
       return;
     }
 
-    if (isCreatingChat) {
+    if (temporaryChat) {
+      await sendMessage({ text });
       return;
     }
 
-    setIsCreatingChat(true);
+    if (isStartingTemporaryChat) {
+      return;
+    }
+
+    setIsStartingTemporaryChat(true);
 
     try {
-      const createdChat = await handleCreateChat(text);
-      setSidebarChats((currentChats) => [
-        createdChat,
-        ...currentChats.filter((chat) => chat.id !== createdChat.id),
-      ]);
-      setTransientChat({
-        ...createdChat,
-        messages: [],
-      });
+      setTemporaryChat(createTemporaryChat());
       setPendingInitialPrompt(text);
-      window.history.replaceState(null, "", `/chats/${createdChat.id}`);
     } catch (createError) {
       setClientError(
         createError instanceof Error
           ? createError.message
-          : "Failed to create chat",
+          : "Failed to start temporary chat",
       );
     } finally {
-      setIsCreatingChat(false);
+      setIsStartingTemporaryChat(false);
+    }
+  };
+
+  const handlePersistChat = async () => {
+    if (!temporaryChat || messages.length === 0) {
+      return;
+    }
+
+    setClientError(null);
+    setIsPersistingChat(true);
+
+    try {
+      const title = buildChatTitleFromMessages(messages);
+      const createdChat = await handleCreateChat({
+        messages,
+        title,
+      });
+
+      setSidebarChats((currentChats) => [
+        createdChat,
+        ...currentChats.filter((chat) => chat.id !== createdChat.id),
+      ]);
+      setTransientPersistedChat({
+        ...createdChat,
+        messages,
+      });
+      clearTemporaryChat();
+      window.history.replaceState(null, "", `/chats/${createdChat.id}`);
+    } catch (persistError) {
+      setClientError(
+        persistError instanceof Error
+          ? persistError.message
+          : "Failed to persist chat",
+      );
+    } finally {
+      setIsPersistingChat(false);
     }
   };
 
@@ -603,6 +703,29 @@ export const Chat = ({
               );
             })
           )}
+          {temporaryChat ? (
+            <button
+              type="button"
+              onClick={() => router.push("/")}
+              className={`mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed px-3 py-2 text-left transition ${
+                isTemporaryChatActive
+                  ? "border-text-secondary bg-page text-text-primary"
+                  : "border-border-strong text-text-secondary hover:bg-surface-raised hover:text-text-primary"
+              }`}
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="truncate text-sm">{temporaryChat.title}</p>
+                  <span className="rounded-full border border-border-strong px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] text-text-muted">
+                    Temp
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs text-text-muted">
+                  Discarded on reload
+                </p>
+              </div>
+            </button>
+          ) : null}
         </nav>
 
         <div className="group mt-3 shrink-0 rounded-xl transition-colors duration-300 hover:bg-page">
@@ -651,6 +774,22 @@ export const Chat = ({
       </aside>
 
       <main className="flex min-h-0 flex-1 flex-col rounded-2xl bg-page p-4 lg:my-3 lg:mr-3 lg:p-6">
+        {isTemporaryChatActive ? (
+          <div className="mx-auto mb-3 flex w-full max-w-3xl items-center gap-3">
+            <button
+              type="button"
+              onClick={() => void handlePersistChat()}
+              disabled={!canPersistTemporaryChat}
+              className="rounded-lg bg-surface-raised px-3 py-1.5 text-xs font-medium text-text-primary transition hover:bg-surface disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {isPersistingChat ? "Persisting..." : "Persist chat"}
+            </button>
+            <p className="text-xs text-text-muted">
+              This conversation is temporary until you persist it.
+            </p>
+          </div>
+        ) : null}
+
         <div className="min-h-0 flex-1">
           <MessageHistory messages={messages} status={displayedStatus} />
         </div>

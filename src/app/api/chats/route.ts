@@ -1,5 +1,10 @@
-import { DEFAULT_CHAT_TITLE } from "@/lib/chats/title";
+import {
+  buildChatTitleFromMessages,
+  DEFAULT_CHAT_TITLE,
+  normalizeChatTitle,
+} from "@/lib/chats/title";
 import { createAgentChat, getAgentChats } from "@/lib/supabase/agent-chats";
+import type { UIMessage } from "ai";
 import { NextRequest } from "next/server";
 
 export async function GET(request: NextRequest) {
@@ -20,9 +25,20 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "Session not found" }, { status: 401 });
   }
 
-  await request.json();
-  const title = DEFAULT_CHAT_TITLE;
+  const payload = (await request.json()) as {
+    messages?: UIMessage[];
+    title?: string;
+  };
+  const messages = Array.isArray(payload.messages) ? payload.messages : [];
+  const title = normalizeChatTitle(
+    typeof payload.title === "string" && payload.title.trim() !== ""
+      ? payload.title
+      : messages.length > 0
+        ? buildChatTitleFromMessages(messages)
+        : DEFAULT_CHAT_TITLE,
+  );
   const chat = await createAgentChat({
+    messages,
     sessionId,
     title,
   });
