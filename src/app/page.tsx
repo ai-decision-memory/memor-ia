@@ -7,7 +7,9 @@ export default async function Home() {
   return (
     <Chat
       activeChat={pageData.activeChat}
+      activeDoc={pageData.activeDoc}
       chats={pageData.chats}
+      docs={pageData.docs}
       githubPatError={pageData.githubPatError}
       githubPatSession={pageData.githubPatSession}
       linearApiKeyError={pageData.linearApiKeyError}
