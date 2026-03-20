@@ -1,0 +1,21 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Memor-ia",
+  "description": "Agentic decision-support app for technical and product teams.",
+  "colors": {
+    "primary": "#14b8a6",
+    "light": "#5eead4",
+    "dark": "#0f766e"
+  },
+  "navigation": {
+    "groups": [
+      {
+        "group": "Product Updates",
+        "pages": [
+          "changelog"
+        ]
+      }
+    ]
+  }
+}

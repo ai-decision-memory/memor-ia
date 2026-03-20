@@ -1,0 +1,46 @@
+---
+title: Changelog
+description: Product updates and release notes.
+rss: true
+---
+
+{/* auto-changelog release:v0.2.0 */}
+
+<Update label={"v0.2.0"}>
+
+## New
+
+- Added a daily cross-tool scan that reviews Slack, GitHub, and Linear to surface inconsistencies automatically.
+- Introduced execution workflows that can turn approved work into GitHub commits and pull requests.
+- Added Claude Code task triggering and remote execution support for follow-up implementation work.
+
+## Improved
+
+- Integrated automated pull request review checks to catch issues earlier in the delivery flow.
+- Upgraded the Linear connection from the earlier MCP-based setup to the official Linear integration for more reliable project syncing and release context.
+
+## Operations
+
+- Expanded the delivery pipeline so changelog and implementation workflows can move from detection to action with less manual coordination.
+
+</Update>
+
+{/* auto-changelog release:v0.1.0 */}
+
+<Update label={"v0.1.0"}>
+
+## New
+
+- Connected Slack, GitHub, and Linear so the workspace can pull product context from the tools the team already uses.
+- Added safer tool access controls so the assistant only works with the approved Slack, GitHub, and Linear capabilities.
+- Introduced persistent conversations with create, rename, and delete actions so teams can keep investigations and release work organized.
+
+## Improved
+
+- Added consistency checks that highlight Linear issues whose tracked status no longer matches the actual implementation state.
+
+## Foundation
+
+- Shipped the connection and safety layer that made cross-tool decision tracking possible in the first place.
+
+</Update>

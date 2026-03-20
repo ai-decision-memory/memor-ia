@@ -1,0 +1,13 @@
+{
+  "draftPath": "docs/changelog-draft.mdx",
+  "publishedPath": "docs/changelog.mdx",
+  "draftWriteback": {
+    "mode": "direct"
+  },
+  "releaseWriteback": {
+    "mode": "pull_request",
+    "branch": "changelog-agent/sync",
+    "autoMerge": false,
+    "mergeMethod": "squash"
+  }
+}
