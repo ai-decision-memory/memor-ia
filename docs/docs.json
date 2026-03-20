@@ -1,17 +1,36 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
+  "theme": "luma",
   "name": "Memor-ia",
   "description": "Agentic decision-support app for technical and product teams.",
   "colors": {
-    "primary": "#14b8a6",
-    "light": "#5eead4",
-    "dark": "#0f766e"
+    "primary": "#e4e4e7",
+    "light": "#a1a1aa",
+    "dark": "#52525b"
+  },
+  "appearance": {
+    "default": "dark",
+    "strict": true
+  },
+  "background": {
+    "color": {
+      "light": "#09090b",
+      "dark": "#09090b"
+    }
+  },
+  "fonts": {
+    "family": "Geist",
+    "body": {
+      "family": "Geist"
+    },
+    "heading": {
+      "family": "Geist"
+    }
   },
   "navigation": {
     "groups": [
       {
-        "group": "Product Updates",
+        "group": "Changelog",
         "pages": [
           "changelog"
         ]
