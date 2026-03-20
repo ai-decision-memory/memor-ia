@@ -1,10 +1,51 @@
 import "server-only";
+import { getAgentDoc, getAgentDocs } from "@/lib/supabase/agent-docs";
 import { getAgentChat, getAgentChats } from "@/lib/supabase/agent-chats";
+import { isSupabaseMissingTableError } from "@/lib/supabase/rest";
 import { getGitHubPATSession } from "@/lib/supabase/github-pat-sessions";
 import { getLinearApiKeySession } from "@/lib/supabase/linear-api-key-sessions";
 import { cookies } from "next/headers";
 
-export async function getWorkspacePageData(activeChatId?: string) {
+async function getSafeAgentDocs(sessionId: string) {
+  try {
+    return await getAgentDocs(sessionId);
+  } catch (error) {
+    if (isSupabaseMissingTableError(error, "agent_docs")) {
+      return [];
+    }
+
+    throw error;
+  }
+}
+
+async function getSafeAgentDoc({
+  docId,
+  sessionId,
+}: {
+  docId: string;
+  sessionId: string;
+}) {
+  try {
+    return await getAgentDoc({
+      docId,
+      sessionId,
+    });
+  } catch (error) {
+    if (isSupabaseMissingTableError(error, "agent_docs")) {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+export async function getWorkspacePageData({
+  activeChatId,
+  activeDocId,
+}: {
+  activeChatId?: string;
+  activeDocId?: string;
+} = {}) {
   const cookieStore = await cookies();
   const sessionId = cookieStore.get("session_id")?.value;
 
@@ -14,26 +55,36 @@ export async function getWorkspacePageData(activeChatId?: string) {
   if (!sessionId) {
     return {
       activeChat: null,
+      activeDoc: null,
       githubPatError,
       githubPatSession: null,
       linearApiKeyError,
       linearApiKeySession: null,
       sessionId: null,
       chats: [],
+      docs: [],
     };
   }
 
-  const [githubPatSession, linearApiKeySession, chats, activeChat] =
+  const [githubPatSession, linearApiKeySession, chats, docs, activeChat, activeDoc] =
     await Promise.all([
       getGitHubPATSession(sessionId),
       getLinearApiKeySession(sessionId),
       getAgentChats(sessionId),
-      activeChatId ? getAgentChat({ chatId: activeChatId, sessionId }) : Promise.resolve(null),
+      getSafeAgentDocs(sessionId),
+      activeChatId
+        ? getAgentChat({ chatId: activeChatId, sessionId })
+        : Promise.resolve(null),
+      activeDocId
+        ? getSafeAgentDoc({ docId: activeDocId, sessionId })
+        : Promise.resolve(null),
     ]);
 
   return {
     activeChat,
+    activeDoc,
     chats,
+    docs,
     githubPatError,
     githubPatSession: githubPatSession
       ? {

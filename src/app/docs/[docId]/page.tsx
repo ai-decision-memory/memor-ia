@@ -2,17 +2,17 @@ import { getWorkspacePageData } from "@/lib/workspace-page-data";
 import { redirect } from "next/navigation";
 import { Chat } from "../../components/Chat";
 
-type ChatPageProps = {
+type DocPageProps = {
   params: Promise<{
-    chatId: string;
+    docId: string;
   }>;
 };
 
-export default async function ChatPage({ params }: ChatPageProps) {
-  const { chatId } = await params;
-  const pageData = await getWorkspacePageData({ activeChatId: chatId });
+export default async function DocPage({ params }: DocPageProps) {
+  const { docId } = await params;
+  const pageData = await getWorkspacePageData({ activeDocId: docId });
 
-  if (pageData.sessionId && !pageData.activeChat) {
+  if (pageData.sessionId && !pageData.activeDoc) {
     redirect("/");
   }
 
