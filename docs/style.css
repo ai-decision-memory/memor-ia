@@ -15,6 +15,22 @@ body {
   letter-spacing: -0.04em;
 }
 
+#navbar #assistant-entry,
+#navbar #assistant-entry-mobile {
+  display: none !important;
+}
+
+#navbar .relative.hidden.lg\:flex.items-center.flex-1.z-20.gap-2\.5 {
+  gap: 0 !important;
+  justify-content: center !important;
+}
+
+#navbar #search-bar-entry {
+  margin: 0 auto !important;
+  max-width: 460px !important;
+  width: min(460px, 100%) !important;
+}
+
 #content-container,
 #content-area,
 #body-content {
@@ -120,27 +136,35 @@ body {
 
 @media (min-width: 1024px) {
   .update-container {
+    align-items: start !important;
+    column-gap: 0 !important;
+    display: grid !important;
     gap: 0 !important;
+    grid-template-columns: 0 minmax(0, 640px) !important;
     justify-content: center !important;
   }
 
   .update-container > .lg\:sticky {
-    flex: 0 0 0 !important;
+    align-self: start !important;
+    flex: none !important;
+    min-width: 0 !important;
     overflow: visible !important;
-    width: 0 !important;
     position: relative !important;
     top: 0 !important;
-    align-self: flex-start !important;
+    width: 0 !important;
   }
 
   .update-container > .flex-1 {
-    flex: 0 1 640px !important;
     max-width: 640px !important;
+    min-width: 0 !important;
     overflow: visible !important;
+    width: 640px !important;
   }
 
   .update-container > .lg\:sticky [data-component-part="update-label"] {
-    transform: translateX(-9rem) !important;
+    left: -8.5rem !important;
+    position: relative !important;
+    transform: none !important;
     white-space: nowrap !important;
   }
 }
