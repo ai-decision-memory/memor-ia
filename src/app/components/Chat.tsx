@@ -985,9 +985,6 @@ export const Chat = ({
                     <p className="truncate text-sm">
                       <TextScramble>{chat.title}</TextScramble>
                     </p>
-                    <p className="mt-0.5 text-xs text-text-muted">
-                      {formatRelativeTimestamp(chat.updated_at)}
-                    </p>
                   </Link>
                   <div
                     className="relative self-center shrink-0"
