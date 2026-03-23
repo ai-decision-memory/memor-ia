@@ -7,6 +7,8 @@ import type {
   AgentDocSummary,
   DocGenerationClarification,
 } from "@/lib/docs/types";
+import type { AgentPinnedPromptSummary } from "@/lib/pinned-prompts/types";
+import type { AgentWorkspaceSummary } from "@/lib/workspaces/types";
 import { useChat } from "@ai-sdk/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -32,21 +34,24 @@ type ChatSummary = {
   id: string;
   title: string;
   updated_at: string;
+  workspace_id?: string;
 };
 
 type PersistedChat = ChatSummary & {
   messages: UIMessage[];
+  workspace_id: string;
 };
 
 type PersistedDoc = AgentDocSummary & {
   content: string;
   source_chat_id: string | null;
+  workspace_id: string;
 };
 
 type SidebarMenuState =
   | {
       id: string;
-      kind: "chat" | "doc";
+      kind: "chat" | "doc" | "prompt";
     }
   | null;
 
@@ -54,7 +59,7 @@ const NEW_CHAT_ID = "new-chat";
 const TEMP_CHAT_ID_PREFIX = "temp-chat-";
 const TEMPORARY_CHAT_TITLE = "Temporary chat";
 
-function createTemporaryChat(): TemporaryChat {
+function createTemporaryChat(workspaceId: string): TemporaryChat {
   const now = new Date().toISOString();
 
   return {
@@ -63,6 +68,7 @@ function createTemporaryChat(): TemporaryChat {
     messages: [],
     title: TEMPORARY_CHAT_TITLE,
     updated_at: now,
+    workspace_id: workspaceId,
   };
 }
 
@@ -287,6 +293,129 @@ function DeleteItemModal({
   );
 }
 
+function WorkspaceModal({
+  error,
+  onClose,
+  onSubmit,
+  submitting,
+}: {
+  error: string | null;
+  onClose: () => void;
+  onSubmit: (title: string) => void;
+  submitting: boolean;
+}) {
+  const [title, setTitle] = useState("");
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    onSubmit(title);
+  };
+
+  return (
+    <ConnectionModal onClose={onClose}>
+      <p className="text-sm font-medium text-text-primary">Create workspace</p>
+      <p className="mt-1 text-xs text-text-muted">
+        Workspaces group chats, docs, and pinned prompts.
+      </p>
+      {error ? (
+        <p className="mt-3 rounded-lg bg-red-950/40 p-2 text-xs text-red-400">{error}</p>
+      ) : null}
+      <form onSubmit={handleSubmit} className="mt-4 space-y-3">
+        <input
+          type="text"
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          placeholder="Growth team"
+          className="w-full rounded-lg bg-page px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-muted"
+          autoFocus
+        />
+        <div className="flex items-center justify-end gap-3 pt-1">
+          <button type="button" onClick={onClose} className="text-xs text-text-muted hover:text-text-primary">
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={!title.trim() || submitting}
+            className="rounded-lg bg-accent px-4 py-1.5 text-xs font-medium text-accent-text transition hover:opacity-80 disabled:opacity-40"
+          >
+            {submitting ? "Creating..." : "Create"}
+          </button>
+        </div>
+      </form>
+    </ConnectionModal>
+  );
+}
+
+function PromptModal({
+  error,
+  initialPrompt,
+  initialTitle,
+  onClose,
+  onSubmit,
+  submitLabel,
+  submitting,
+}: {
+  error: string | null;
+  initialPrompt?: string;
+  initialTitle?: string;
+  onClose: () => void;
+  onSubmit: (values: { prompt: string; title: string }) => void;
+  submitLabel: string;
+  submitting: boolean;
+}) {
+  const [title, setTitle] = useState(initialTitle ?? "");
+  const [prompt, setPrompt] = useState(initialPrompt ?? "");
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    onSubmit({
+      prompt,
+      title,
+    });
+  };
+
+  return (
+    <ConnectionModal onClose={onClose}>
+      <p className="text-sm font-medium text-text-primary">Pinned prompt</p>
+      <p className="mt-1 text-xs text-text-muted">
+        Save reusable prompts for this workspace.
+      </p>
+      {error ? (
+        <p className="mt-3 rounded-lg bg-red-950/40 p-2 text-xs text-red-400">{error}</p>
+      ) : null}
+      <form onSubmit={handleSubmit} className="mt-4 space-y-3">
+        <input
+          type="text"
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          placeholder="Weekly delivery summary"
+          className="w-full rounded-lg bg-page px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-muted"
+          autoFocus
+        />
+        <textarea
+          value={prompt}
+          onChange={(event) => setPrompt(event.target.value)}
+          rows={5}
+          placeholder="Summarize what shipped this week, blockers, and next steps."
+          className="w-full resize-none rounded-lg bg-page px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-muted"
+        />
+        <div className="flex items-center justify-end gap-3 pt-1">
+          <button type="button" onClick={onClose} className="text-xs text-text-muted hover:text-text-primary">
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={!prompt.trim() || submitting}
+            className="rounded-lg bg-accent px-4 py-1.5 text-xs font-medium text-accent-text transition hover:opacity-80 disabled:opacity-40"
+          >
+            {submitting ? "Saving..." : submitLabel}
+          </button>
+        </div>
+      </form>
+    </ConnectionModal>
+  );
+}
+
 function GenerateDocsClarificationModal({
   answer,
   error,
@@ -346,22 +475,34 @@ function formatDocKindLabel(kind: AgentDocKind) {
   return kind === "user-facing" ? "User-facing" : "Technical";
 }
 
-function getItemLabel(kind: "chat" | "doc") {
-  return kind === "chat" ? "chat" : "doc";
+function getItemLabel(kind: "chat" | "doc" | "prompt") {
+  if (kind === "chat") {
+    return "chat";
+  }
+
+  if (kind === "doc") {
+    return "doc";
+  }
+
+  return "pinned prompt";
 }
 
 export const Chat = ({
   activeChat,
   activeDoc,
+  activeWorkspace,
   chats,
   docs,
   githubPatError,
   githubPatSession,
   linearApiKeyError,
   linearApiKeySession,
+  pinnedPrompts,
+  workspaces,
 }: {
   activeChat: PersistedChat | null;
   activeDoc: PersistedDoc | null;
+  activeWorkspace: AgentWorkspaceSummary | null;
   chats: ChatSummary[];
   docs: AgentDocSummary[];
   githubPatError: string | null;
@@ -375,6 +516,8 @@ export const Chat = ({
     teamName: string;
     userName: string;
   } | null;
+  pinnedPrompts: AgentPinnedPromptSummary[];
+  workspaces: AgentWorkspaceSummary[];
 }) => {
   const router = useRouter();
   const { clearTemporaryChat, setTemporaryChat, temporaryChat } = useChatWorkspace();
@@ -385,6 +528,10 @@ export const Chat = ({
   const [pendingInitialPrompt, setPendingInitialPrompt] = useState<string | null>(null);
   const [sidebarChats, setSidebarChats] = useState<ChatSummary[]>(chats);
   const [sidebarDocs, setSidebarDocs] = useState<AgentDocSummary[]>(docs);
+  const [sidebarPinnedPrompts, setSidebarPinnedPrompts] =
+    useState<AgentPinnedPromptSummary[]>(pinnedPrompts);
+  const [sidebarWorkspaces, setSidebarWorkspaces] =
+    useState<AgentWorkspaceSummary[]>(workspaces);
   const [transientPersistedChat, setTransientPersistedChat] =
     useState<PersistedChat | null>(null);
   const [openMenu, setOpenMenu] = useState<SidebarMenuState>(null);
@@ -402,6 +549,14 @@ export const Chat = ({
   const [docClarifications, setDocClarifications] = useState<
     DocGenerationClarification[]
   >([]);
+  const [showWorkspaceModal, setShowWorkspaceModal] = useState(false);
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+  const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
+  const [editingPrompt, setEditingPrompt] =
+    useState<AgentPinnedPromptSummary | null>(null);
+  const [showPromptModal, setShowPromptModal] = useState(false);
+  const [promptError, setPromptError] = useState<string | null>(null);
+  const [isSavingPrompt, setIsSavingPrompt] = useState(false);
 
   const closeSidebarMenu = useCallback(() => setOpenMenu(null), []);
 
@@ -417,12 +572,17 @@ export const Chat = ({
   }, [closeSidebarMenu, openMenu]);
 
   const allConnected = !!githubPatSession && !!linearApiKeySession;
+  const currentWorkspaceId = activeWorkspace?.id ?? null;
+  const currentTemporaryChat =
+    temporaryChat && temporaryChat.workspace_id === currentWorkspaceId
+      ? temporaryChat
+      : null;
 
   const isDocView = !!activeDoc;
   const activePersistedChat =
     isDocView ? null : transientPersistedChat ?? activeChat;
   const resolvedActiveChat =
-    isDocView ? null : activePersistedChat ?? temporaryChat;
+    isDocView ? null : activePersistedChat ?? currentTemporaryChat;
   const resolvedActiveDoc = useMemo(() => {
     if (!activeDoc) {
       return null;
@@ -437,7 +597,7 @@ export const Chat = ({
         }
       : activeDoc;
   }, [activeDoc, sidebarDocs]);
-  const isTemporaryChatActive = !isDocView && !activePersistedChat && !!temporaryChat;
+  const isTemporaryChatActive = !isDocView && !activePersistedChat && !!currentTemporaryChat;
   const activeChatId = resolvedActiveChat?.id ?? null;
   const initialMessages = useMemo(
     () => resolvedActiveChat?.messages ?? [],
@@ -539,18 +699,26 @@ export const Chat = ({
   }, [docs]);
 
   useEffect(() => {
+    setSidebarPinnedPrompts(pinnedPrompts);
+  }, [pinnedPrompts]);
+
+  useEffect(() => {
+    setSidebarWorkspaces(workspaces);
+  }, [workspaces]);
+
+  useEffect(() => {
     if (activeChat?.id) {
       setTransientPersistedChat(null);
     }
   }, [activeChat?.id]);
 
   useEffect(() => {
-    if (!temporaryChat || activeChatId !== temporaryChat.id) {
+    if (!currentTemporaryChat || activeChatId !== currentTemporaryChat.id) {
       return;
     }
 
     setTemporaryChat((currentChat) => {
-      if (!currentChat || currentChat.id !== temporaryChat.id) {
+      if (!currentChat || currentChat.id !== currentTemporaryChat.id) {
         return currentChat;
       }
 
@@ -571,7 +739,7 @@ export const Chat = ({
         updated_at: didMessagesChange ? new Date().toISOString() : currentChat.updated_at,
       };
     });
-  }, [activeChatId, messages, setTemporaryChat, temporaryChat]);
+  }, [activeChatId, currentTemporaryChat, messages, setTemporaryChat]);
 
   useEffect(() => {
     if (
@@ -601,6 +769,11 @@ export const Chat = ({
     displayedStatus !== "streaming" &&
     displayedStatus !== "submitted" &&
     !isGeneratingDoc;
+  const canPinPrompt =
+    !!currentWorkspaceId &&
+    displayedStatus !== "streaming" &&
+    displayedStatus !== "submitted" &&
+    !isSavingPrompt;
 
   const resetDocGenerationState = () => {
     setDocClarificationAnswer("");
@@ -608,6 +781,13 @@ export const Chat = ({
     setDocClarificationQuestion(null);
     setDocClarifications([]);
     setIsGeneratingDoc(false);
+  };
+
+  const resetPromptModalState = () => {
+    setEditingPrompt(null);
+    setPromptError(null);
+    setShowPromptModal(false);
+    setIsSavingPrompt(false);
   };
 
   const resetDraftState = () => {
@@ -623,7 +803,7 @@ export const Chat = ({
 
   const handleStartNewChat = () => {
     resetDraftState();
-    router.push("/");
+    router.push(currentWorkspaceId ? `/?workspaceId=${currentWorkspaceId}` : "/");
   };
 
   const moveChatToTop = (chatId: string) => {
@@ -653,6 +833,10 @@ export const Chat = ({
     messages?: UIMessage[];
     title?: string;
   } = {}) => {
+    if (!currentWorkspaceId) {
+      throw new Error("Workspace not found");
+    }
+
     const response = await fetch("/api/chats", {
       method: "POST",
       headers: {
@@ -661,6 +845,7 @@ export const Chat = ({
       body: JSON.stringify({
         ...(Array.isArray(nextMessages) ? { messages: nextMessages } : {}),
         ...(title ? { title } : {}),
+        workspaceId: currentWorkspaceId,
       }),
     });
 
@@ -675,6 +860,102 @@ export const Chat = ({
     return payload.chat;
   };
 
+  const handleCreateWorkspace = async (title: string) => {
+    setWorkspaceError(null);
+    setIsCreatingWorkspace(true);
+
+    try {
+      const response = await fetch("/api/workspaces", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ title }),
+      });
+
+      if (!response.ok) {
+        throw new Error((await response.text()) || "Failed to create workspace");
+      }
+
+      const payload = (await response.json()) as {
+        workspace: AgentWorkspaceSummary;
+      };
+
+      setSidebarWorkspaces((currentWorkspaces) => [
+        payload.workspace,
+        ...currentWorkspaces.filter(
+          (workspace) => workspace.id !== payload.workspace.id,
+        ),
+      ]);
+      setShowWorkspaceModal(false);
+      router.push(`/?workspaceId=${payload.workspace.id}`);
+    } catch (createError) {
+      setWorkspaceError(
+        createError instanceof Error
+          ? createError.message
+          : "Failed to create workspace",
+      );
+    } finally {
+      setIsCreatingWorkspace(false);
+    }
+  };
+
+  const handleSavePinnedPrompt = async ({
+    prompt,
+    title,
+  }: {
+    prompt: string;
+    title: string;
+  }) => {
+    if (!currentWorkspaceId) {
+      setPromptError("Workspace not found");
+      return;
+    }
+
+    setPromptError(null);
+    setIsSavingPrompt(true);
+
+    try {
+      const response = await fetch(
+        editingPrompt
+          ? `/api/pinned-prompts/${editingPrompt.id}`
+          : "/api/pinned-prompts",
+        {
+          method: editingPrompt ? "PATCH" : "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            prompt,
+            title,
+            ...(editingPrompt ? {} : { workspaceId: currentWorkspaceId }),
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error((await response.text()) || "Failed to save pinned prompt");
+      }
+
+      const payload = (await response.json()) as {
+        prompt: AgentPinnedPromptSummary;
+      };
+
+      setSidebarPinnedPrompts((currentPrompts) => [
+        payload.prompt,
+        ...currentPrompts.filter((item) => item.id !== payload.prompt.id),
+      ]);
+      resetPromptModalState();
+    } catch (saveError) {
+      setPromptError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Failed to save pinned prompt",
+      );
+      setIsSavingPrompt(false);
+    }
+  };
+
   const handleSendMessage = async ({ text }: { text: string }) => {
     setClientError(null);
 
@@ -684,19 +965,19 @@ export const Chat = ({
       return;
     }
 
-    if (temporaryChat) {
+    if (currentTemporaryChat) {
       await sendMessage({ text });
       return;
     }
 
-    if (isStartingTemporaryChat) {
+    if (isStartingTemporaryChat || !currentWorkspaceId) {
       return;
     }
 
     setIsStartingTemporaryChat(true);
 
     try {
-      setTemporaryChat(createTemporaryChat());
+      setTemporaryChat(createTemporaryChat(currentWorkspaceId));
       setPendingInitialPrompt(text);
     } catch (createError) {
       setClientError(
@@ -710,7 +991,7 @@ export const Chat = ({
   };
 
   const handlePersistChat = async () => {
-    if (!temporaryChat || messages.length === 0) {
+    if (!currentTemporaryChat || messages.length === 0) {
       return;
     }
 
@@ -731,6 +1012,7 @@ export const Chat = ({
       setTransientPersistedChat({
         ...createdChat,
         messages,
+        workspace_id: currentTemporaryChat.workspace_id,
       });
       clearTemporaryChat();
       window.history.replaceState(null, "", `/chats/${createdChat.id}`);
@@ -754,7 +1036,7 @@ export const Chat = ({
     );
 
     if (activeChatId === chatId) {
-      router.push("/");
+      router.push(currentWorkspaceId ? `/?workspaceId=${currentWorkspaceId}` : "/");
     }
 
     try {
@@ -783,7 +1065,7 @@ export const Chat = ({
     );
 
     if (resolvedActiveDoc?.id === docId) {
-      router.push("/");
+      router.push(currentWorkspaceId ? `/?workspaceId=${currentWorkspaceId}` : "/");
     }
 
     try {
@@ -851,6 +1133,35 @@ export const Chat = ({
     });
   };
 
+  const handleDeletePinnedPrompt = async (promptId: string) => {
+    setDeletingItem(null);
+    setClientError(null);
+
+    setSidebarPinnedPrompts((currentPrompts) =>
+      currentPrompts.filter((prompt) => prompt.id !== promptId),
+    );
+
+    try {
+      const response = await fetch(`/api/pinned-prompts/${promptId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        throw new Error((await response.text()) || "Failed to delete pinned prompt");
+      }
+    } catch (deleteError) {
+      setClientError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : "Failed to delete pinned prompt",
+      );
+    }
+  };
+
+  const handleRunPinnedPrompt = async (prompt: AgentPinnedPromptSummary) => {
+    await handleSendMessage({ text: prompt.prompt });
+  };
+
   const handleGenerateDoc = async (
     clarifications: DocGenerationClarification[] = docClarifications,
   ) => {
@@ -869,9 +1180,10 @@ export const Chat = ({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          chatId: activePersistedChat?.id ?? temporaryChat?.id ?? null,
+          chatId: activePersistedChat?.id ?? currentTemporaryChat?.id ?? null,
           clarifications,
           messages,
+          workspaceId: currentWorkspaceId,
         }),
       });
 
@@ -947,24 +1259,180 @@ export const Chat = ({
       <aside className="flex w-full flex-col px-4 py-4 text-text-primary lg:h-screen lg:w-72 lg:shrink-0">
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs font-semibold uppercase tracking-[0.15em] text-text-muted">
-            Conversations
+            Workspace
           </p>
           <button
             type="button"
             onClick={handleStartNewChat}
             className="rounded-lg bg-surface-raised px-3 py-1.5 text-xs font-medium text-text-secondary transition hover:text-text-primary"
           >
-            + New
+            + Chat
           </button>
         </div>
 
         <nav className="mt-5 flex-1 space-y-0.5 overflow-y-auto">
-          {sidebarChats.length === 0 && !temporaryChat ? (
-            <div className="px-3 py-6 text-sm text-text-muted">
-              No chats yet.
+          <div>
+            <div className="mb-2 flex items-center justify-between px-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+                Workspaces
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setWorkspaceError(null);
+                  setShowWorkspaceModal(true);
+                }}
+                className="text-xs text-text-muted transition hover:text-text-primary"
+              >
+                + New
+              </button>
             </div>
-          ) : (
-            sidebarChats.map((chat) => {
+
+            {sidebarWorkspaces.length === 0 ? (
+              <div className="px-3 py-3 text-sm text-text-muted">
+                No workspaces yet.
+              </div>
+            ) : (
+              sidebarWorkspaces.map((workspace) => {
+                const isActive = workspace.id === currentWorkspaceId;
+
+                return (
+                  <button
+                    key={workspace.id}
+                    type="button"
+                    onClick={() => {
+                      resetDraftState();
+                      router.push(`/?workspaceId=${workspace.id}`);
+                    }}
+                    className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition ${
+                      isActive
+                        ? "bg-page text-text-primary"
+                        : "text-text-secondary hover:bg-surface-raised hover:text-text-primary"
+                    }`}
+                  >
+                    <p className="truncate text-sm">
+                      <TextScramble>{workspace.title}</TextScramble>
+                    </p>
+                    {isActive ? (
+                      <span className="rounded-full border border-border-strong px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] text-text-muted">
+                        Active
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })
+            )}
+          </div>
+
+          <div className="mt-6 border-t border-border-subtle pt-4">
+            <div className="mb-2 flex items-center justify-between px-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+                Pinned Prompts
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingPrompt(null);
+                  setPromptError(null);
+                  setShowPromptModal(true);
+                }}
+                disabled={!canPinPrompt}
+                className="text-xs text-text-muted transition hover:text-text-primary disabled:opacity-40"
+              >
+                + Pin
+              </button>
+            </div>
+
+            {sidebarPinnedPrompts.length === 0 ? (
+              <div className="px-3 py-3 text-sm text-text-muted">
+                Save repeated prompts for this workspace.
+              </div>
+            ) : (
+              sidebarPinnedPrompts.map((prompt) => {
+                const isMenuOpen =
+                  openMenu?.kind === "prompt" && openMenu.id === prompt.id;
+
+                return (
+                  <div
+                    key={prompt.id}
+                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-text-secondary transition hover:bg-surface-raised hover:text-text-primary"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => void handleRunPinnedPrompt(prompt)}
+                      className="min-w-0 flex-1 text-left"
+                    >
+                      <p className="truncate text-sm">{prompt.title}</p>
+                      <p className="mt-0.5 line-clamp-2 text-xs text-text-muted">
+                        {prompt.prompt}
+                      </p>
+                    </button>
+                    <div
+                      className="relative self-center shrink-0"
+                      ref={isMenuOpen ? menuRef : undefined}
+                    >
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setOpenMenu(
+                            isMenuOpen ? null : { id: prompt.id, kind: "prompt" },
+                          );
+                        }}
+                        className="flex h-6 w-6 items-center justify-center rounded text-sm leading-none text-text-muted transition hover:text-text-primary"
+                      >
+                        &#x22EF;
+                      </button>
+                      {isMenuOpen ? (
+                        <div className="absolute right-0 top-full z-10 mt-1 w-32 rounded-lg bg-page py-1 shadow-lg">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOpenMenu(null);
+                              setEditingPrompt(prompt);
+                              setPromptError(null);
+                              setShowPromptModal(true);
+                            }}
+                            className="block w-full px-3 py-1.5 text-left text-xs text-text-secondary hover:text-text-primary"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOpenMenu(null);
+                              setDeletingItem({ id: prompt.id, kind: "prompt" });
+                            }}
+                            className="block w-full px-3 py-1.5 text-left text-xs text-red-400 hover:text-red-300"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          <div className="mt-6 border-t border-border-subtle pt-4">
+            <div className="mb-2 flex items-center justify-between px-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+                Chats
+              </p>
+              <span className="text-[11px] text-text-muted">
+                {sidebarChats.length}
+              </span>
+            </div>
+
+            {sidebarChats.length === 0 && !currentTemporaryChat ? (
+              <div className="px-3 py-3 text-sm text-text-muted">
+                No chats yet in this workspace.
+              </div>
+            ) : null}
+
+            {sidebarChats.map((chat) => {
               const isActive = chat.id === activeChatId;
               const isMenuOpen =
                 openMenu?.kind === "chat" && openMenu.id === chat.id;
@@ -978,10 +1446,7 @@ export const Chat = ({
                       : "text-text-secondary hover:bg-surface-raised hover:text-text-primary"
                   }`}
                 >
-                  <Link
-                    href={`/chats/${chat.id}`}
-                    className="min-w-0 flex-1"
-                  >
+                  <Link href={`/chats/${chat.id}`} className="min-w-0 flex-1">
                     <p className="truncate text-sm">
                       <TextScramble>{chat.title}</TextScramble>
                     </p>
@@ -992,8 +1457,8 @@ export const Chat = ({
                   >
                     <button
                       type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
+                      onClick={(event) => {
+                        event.stopPropagation();
                         setOpenMenu(
                           isMenuOpen ? null : { id: chat.id, kind: "chat" },
                         );
@@ -1029,32 +1494,34 @@ export const Chat = ({
                   </div>
                 </div>
               );
-            })
-          )}
+            })}
 
-          {temporaryChat ? (
-            <button
-              type="button"
-              onClick={() => router.push("/")}
-              className={`mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed px-3 py-2 text-left transition ${
-                isTemporaryChatActive
-                  ? "border-text-secondary bg-page text-text-primary"
-                  : "border-border-strong text-text-secondary hover:bg-surface-raised hover:text-text-primary"
-              }`}
-            >
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <p className="truncate text-sm">{temporaryChat.title}</p>
-                  <span className="rounded-full border border-border-strong px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] text-text-muted">
-                    Temp
-                  </span>
+            {currentTemporaryChat ? (
+              <button
+                type="button"
+                onClick={() =>
+                  router.push(currentWorkspaceId ? `/?workspaceId=${currentWorkspaceId}` : "/")
+                }
+                className={`mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed px-3 py-2 text-left transition ${
+                  isTemporaryChatActive
+                    ? "border-text-secondary bg-page text-text-primary"
+                    : "border-border-strong text-text-secondary hover:bg-surface-raised hover:text-text-primary"
+                }`}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="truncate text-sm">{currentTemporaryChat.title}</p>
+                    <span className="rounded-full border border-border-strong px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] text-text-muted">
+                      Temp
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-xs text-text-muted">
+                    Discarded on reload
+                  </p>
                 </div>
-                <p className="mt-0.5 text-xs text-text-muted">
-                  Discarded on reload
-                </p>
-              </div>
-            </button>
-          ) : null}
+              </button>
+            ) : null}
+          </div>
 
           <div className="mt-6 border-t border-border-subtle pt-4">
             <div className="mb-2 flex items-center justify-between px-3">
@@ -1199,6 +1666,11 @@ export const Chat = ({
                   {buildDocFileName(resolvedActiveDoc.title)}
                 </h1>
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-text-muted">
+                  {activeWorkspace ? (
+                    <span className="rounded-full border border-border-strong px-2 py-1">
+                      {activeWorkspace.title}
+                    </span>
+                  ) : null}
                   <span className="rounded-full border border-border-strong px-2 py-1">
                     {formatDocKindLabel(resolvedActiveDoc.kind)}
                   </span>
@@ -1231,6 +1703,11 @@ export const Chat = ({
           <>
             <div className="mx-auto mb-3 flex w-full max-w-3xl items-center justify-between gap-3">
               <div className="min-w-0">
+                {activeWorkspace ? (
+                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+                    {activeWorkspace.title}
+                  </p>
+                ) : null}
                 {isTemporaryChatActive ? (
                   <div className="flex items-center gap-3">
                     <button
@@ -1261,6 +1738,22 @@ export const Chat = ({
                 {isGeneratingDoc ? "Generating..." : "Generate docs"}
               </button>
             </div>
+
+            {sidebarPinnedPrompts.length > 0 ? (
+              <div className="mx-auto mb-4 flex w-full max-w-3xl flex-wrap gap-2">
+                {sidebarPinnedPrompts.map((prompt) => (
+                  <button
+                    key={prompt.id}
+                    type="button"
+                    onClick={() => void handleRunPinnedPrompt(prompt)}
+                    disabled={displayedStatus === "streaming" || displayedStatus === "submitted"}
+                    className="rounded-full border border-border-strong px-3 py-1.5 text-xs text-text-secondary transition hover:border-text-secondary hover:text-text-primary disabled:opacity-40"
+                  >
+                    {prompt.title}
+                  </button>
+                ))}
+              </div>
+            ) : null}
 
             <div className="min-h-0 flex-1">
               <MessageHistory messages={messages} status={displayedStatus} />
@@ -1300,13 +1793,17 @@ export const Chat = ({
           currentTitle={
             renamingItem.kind === "chat"
               ? sidebarChats.find((chat) => chat.id === renamingItem.id)?.title ?? ""
-              : sidebarDocs.find((doc) => doc.id === renamingItem.id)?.title ?? ""
+              : renamingItem.kind === "doc"
+                ? sidebarDocs.find((doc) => doc.id === renamingItem.id)?.title ?? ""
+                : sidebarPinnedPrompts.find((prompt) => prompt.id === renamingItem.id)?.title ?? ""
           }
           onClose={() => setRenamingItem(null)}
           onRename={(title) =>
             renamingItem.kind === "chat"
               ? handleRenameChat(renamingItem.id, title)
-              : handleRenameDoc(renamingItem.id, title)
+              : renamingItem.kind === "doc"
+                ? handleRenameDoc(renamingItem.id, title)
+                : undefined
           }
         />
       ) : null}
@@ -1316,7 +1813,9 @@ export const Chat = ({
           description={
             deletingItem.kind === "chat"
               ? "This will permanently delete this chat and all its messages."
-              : "This will permanently delete this generated markdown doc."
+              : deletingItem.kind === "doc"
+                ? "This will permanently delete this generated markdown doc."
+                : "This will permanently delete this pinned prompt."
           }
           itemLabel={getItemLabel(deletingItem.kind)}
           onClose={() => setDeletingItem(null)}
@@ -1324,9 +1823,35 @@ export const Chat = ({
             void (
               deletingItem.kind === "chat"
                 ? handleDeleteChat(deletingItem.id)
-                : handleDeleteDoc(deletingItem.id)
+                : deletingItem.kind === "doc"
+                  ? handleDeleteDoc(deletingItem.id)
+                  : handleDeletePinnedPrompt(deletingItem.id)
             )
           }
+        />
+      ) : null}
+
+      {showWorkspaceModal ? (
+        <WorkspaceModal
+          error={workspaceError}
+          onClose={() => {
+            setWorkspaceError(null);
+            setShowWorkspaceModal(false);
+          }}
+          onSubmit={(title) => void handleCreateWorkspace(title)}
+          submitting={isCreatingWorkspace}
+        />
+      ) : null}
+
+      {showPromptModal ? (
+        <PromptModal
+          error={promptError}
+          initialPrompt={editingPrompt?.prompt ?? input}
+          initialTitle={editingPrompt?.title}
+          onClose={resetPromptModalState}
+          onSubmit={(values) => void handleSavePinnedPrompt(values)}
+          submitLabel={editingPrompt ? "Save" : "Pin prompt"}
+          submitting={isSavingPrompt}
         />
       ) : null}
 

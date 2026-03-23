@@ -7,6 +7,7 @@ import { normalizeDocTitle } from "@/lib/docs/title";
 import type { DocGenerationClarification } from "@/lib/docs/types";
 import { getAgentChat } from "@/lib/supabase/agent-chats";
 import { createAgentDoc } from "@/lib/supabase/agent-docs";
+import { getAgentWorkspace } from "@/lib/supabase/agent-workspaces";
 import { openai } from "@ai-sdk/openai";
 import { generateText, type UIMessage } from "ai";
 import { NextRequest } from "next/server";
@@ -57,6 +58,7 @@ export async function POST(request: NextRequest) {
     chatId?: string | null;
     clarifications?: unknown;
     messages?: UIMessage[];
+    workspaceId?: string | null;
   };
   const messages = Array.isArray(payload.messages) ? payload.messages : [];
 
@@ -68,6 +70,9 @@ export async function POST(request: NextRequest) {
   }
 
   let sourceChatId: string | null = null;
+  const requestedWorkspaceId =
+    typeof payload.workspaceId === "string" ? payload.workspaceId : "";
+  let sourceChatWorkspaceId: string | null = null;
 
   if (payload.chatId && !payload.chatId.startsWith(TEMP_CHAT_ID_PREFIX)) {
     const chat = await getAgentChat({
@@ -80,6 +85,22 @@ export async function POST(request: NextRequest) {
     }
 
     sourceChatId = chat.id;
+    sourceChatWorkspaceId = chat.workspace_id;
+  }
+
+  const workspaceId = sourceChatWorkspaceId ?? requestedWorkspaceId;
+
+  if (!workspaceId) {
+    return Response.json({ error: "Workspace not found" }, { status: 400 });
+  }
+
+  const workspace = await getAgentWorkspace({
+    sessionId,
+    workspaceId,
+  });
+
+  if (!workspace) {
+    return Response.json({ error: "Workspace not found" }, { status: 404 });
   }
 
   const clarifications = sanitizeClarifications(payload.clarifications);
@@ -106,6 +127,7 @@ export async function POST(request: NextRequest) {
     sessionId,
     sourceChatId,
     title: normalizeDocTitle(decision.title),
+    workspaceId: workspace.id,
   });
 
   if (!doc) {

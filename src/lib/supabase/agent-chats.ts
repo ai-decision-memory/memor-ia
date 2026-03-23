@@ -7,6 +7,7 @@ const AGENT_CHATS_TABLE = "agent_chats";
 export type AgentChatRecord = {
   id: string;
   session_id: string;
+  workspace_id: string;
   title: string;
   messages: UIMessage[];
   created_at: string;
@@ -18,12 +19,19 @@ export type AgentChatListItem = Pick<
   "id" | "title" | "created_at" | "updated_at"
 >;
 
-export async function getAgentChats(sessionId: string) {
+export async function getAgentChats({
+  sessionId,
+  workspaceId,
+}: {
+  sessionId: string;
+  workspaceId: string;
+}) {
   return await supabaseRequest<AgentChatListItem[]>({
     method: "GET",
     searchParams: {
       select: "id,title,created_at,updated_at",
       session_id: `eq.${sessionId}`,
+      workspace_id: `eq.${workspaceId}`,
       order: "updated_at.desc",
     },
     tableName: AGENT_CHATS_TABLE,
@@ -54,16 +62,19 @@ export async function createAgentChat({
   messages = [],
   sessionId,
   title,
+  workspaceId,
 }: {
   messages?: UIMessage[];
   sessionId: string;
   title: string;
+  workspaceId: string;
 }) {
   const chats = await supabaseRequest<AgentChatRecord[]>({
     body: {
       messages,
       session_id: sessionId,
       title,
+      workspace_id: workspaceId,
     },
     method: "POST",
     prefer: "return=representation",
