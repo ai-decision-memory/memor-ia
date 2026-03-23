@@ -48,6 +48,16 @@ type PersistedDoc = AgentDocSummary & {
   workspace_id: string;
 };
 
+function summarizeDoc(doc: PersistedDoc): AgentDocSummary {
+  return {
+    created_at: doc.created_at,
+    id: doc.id,
+    kind: doc.kind,
+    title: doc.title,
+    updated_at: doc.updated_at,
+  };
+}
+
 type SidebarMenuState =
   | {
       id: string;
@@ -534,6 +544,7 @@ export const Chat = ({
     useState<AgentWorkspaceSummary[]>(workspaces);
   const [transientPersistedChat, setTransientPersistedChat] =
     useState<PersistedChat | null>(null);
+  const [localActiveDoc, setLocalActiveDoc] = useState<PersistedDoc | null>(activeDoc);
   const [openMenu, setOpenMenu] = useState<SidebarMenuState>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [openModal, setOpenModal] = useState<"github" | "linear" | null>(
@@ -557,6 +568,9 @@ export const Chat = ({
   const [showPromptModal, setShowPromptModal] = useState(false);
   const [promptError, setPromptError] = useState<string | null>(null);
   const [isSavingPrompt, setIsSavingPrompt] = useState(false);
+  const [isEditingDoc, setIsEditingDoc] = useState(false);
+  const [docDraftContent, setDocDraftContent] = useState(activeDoc?.content ?? "");
+  const [isSavingDoc, setIsSavingDoc] = useState(false);
 
   const closeSidebarMenu = useCallback(() => setOpenMenu(null), []);
 
@@ -584,19 +598,19 @@ export const Chat = ({
   const resolvedActiveChat =
     isDocView ? null : activePersistedChat ?? currentTemporaryChat;
   const resolvedActiveDoc = useMemo(() => {
-    if (!activeDoc) {
+    if (!localActiveDoc) {
       return null;
     }
 
-    const matchingSidebarDoc = sidebarDocs.find((doc) => doc.id === activeDoc.id);
+    const matchingSidebarDoc = sidebarDocs.find((doc) => doc.id === localActiveDoc.id);
 
     return matchingSidebarDoc
       ? {
-          ...activeDoc,
+          ...localActiveDoc,
           ...matchingSidebarDoc,
         }
-      : activeDoc;
-  }, [activeDoc, sidebarDocs]);
+      : localActiveDoc;
+  }, [localActiveDoc, sidebarDocs]);
   const isTemporaryChatActive = !isDocView && !activePersistedChat && !!currentTemporaryChat;
   const activeChatId = resolvedActiveChat?.id ?? null;
   const initialMessages = useMemo(
@@ -625,6 +639,14 @@ export const Chat = ({
     );
   };
 
+  const applyDocUpdate = useCallback((doc: PersistedDoc) => {
+    setSidebarDocs((currentDocs) => [
+      summarizeDoc(doc),
+      ...currentDocs.filter((currentDoc) => currentDoc.id !== doc.id),
+    ]);
+    setLocalActiveDoc((currentDoc) => (currentDoc?.id === doc.id ? doc : currentDoc));
+  }, []);
+
   const persistChatTitle = async ({
     chatId,
     title,
@@ -651,27 +673,32 @@ export const Chat = ({
     return payload.chat;
   };
 
-  const persistDocTitle = async ({
+  const persistDoc = async ({
+    content,
     docId,
     title,
   }: {
+    content?: string;
     docId: string;
-    title: string;
+    title?: string;
   }) => {
     const response = await fetch(`/api/docs/${docId}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ title }),
+      body: JSON.stringify({
+        ...(content !== undefined ? { content } : {}),
+        ...(title !== undefined ? { title } : {}),
+      }),
     });
 
     if (!response.ok) {
-      throw new Error((await response.text()) || "Failed to update doc title");
+      throw new Error((await response.text()) || "Failed to update doc");
     }
 
     const payload = (await response.json()) as {
-      doc: AgentDocSummary;
+      doc: PersistedDoc;
     };
 
     return payload.doc;
@@ -711,6 +738,13 @@ export const Chat = ({
       setTransientPersistedChat(null);
     }
   }, [activeChat?.id]);
+
+  useEffect(() => {
+    setLocalActiveDoc(activeDoc);
+    setDocDraftContent(activeDoc?.content ?? "");
+    setIsEditingDoc(false);
+    setIsSavingDoc(false);
+  }, [activeDoc]);
 
   useEffect(() => {
     if (!currentTemporaryChat || activeChatId !== currentTemporaryChat.id) {
@@ -1120,17 +1154,77 @@ export const Chat = ({
       title: trimmedTitle,
     }));
 
-    persistDocTitle({ docId, title: trimmedTitle }).catch((renameError) => {
-      if (doc) {
-        updateSidebarDoc(docId, () => doc);
-      }
+    persistDoc({ docId, title: trimmedTitle })
+      .then((updatedDoc) => {
+        applyDocUpdate(updatedDoc);
+      })
+      .catch((renameError) => {
+        if (doc) {
+          updateSidebarDoc(docId, () => doc);
+        }
 
+        setClientError(
+          renameError instanceof Error
+            ? renameError.message
+            : "Failed to rename doc",
+        );
+      });
+  };
+
+  const handleStartEditingDoc = () => {
+    if (!resolvedActiveDoc) {
+      return;
+    }
+
+    setClientError(null);
+    setDocDraftContent(resolvedActiveDoc.content);
+    setIsEditingDoc(true);
+  };
+
+  const handleCancelEditingDoc = () => {
+    setClientError(null);
+    setDocDraftContent(resolvedActiveDoc?.content ?? "");
+    setIsEditingDoc(false);
+  };
+
+  const handleSaveDoc = async () => {
+    if (!resolvedActiveDoc) {
+      return;
+    }
+
+    const nextContent = docDraftContent.replace(/\r\n/g, "\n");
+
+    if (nextContent.trim() === "") {
+      setClientError("Doc content cannot be empty");
+      return;
+    }
+
+    if (nextContent === resolvedActiveDoc.content) {
+      setIsEditingDoc(false);
+      return;
+    }
+
+    setClientError(null);
+    setIsSavingDoc(true);
+
+    try {
+      const updatedDoc = await persistDoc({
+        content: nextContent,
+        docId: resolvedActiveDoc.id,
+      });
+
+      applyDocUpdate(updatedDoc);
+      setDocDraftContent(updatedDoc.content);
+      setIsEditingDoc(false);
+    } catch (saveError) {
       setClientError(
-        renameError instanceof Error
-          ? renameError.message
-          : "Failed to rename doc",
+        saveError instanceof Error
+          ? saveError.message
+          : "Failed to save doc",
       );
-    });
+    } finally {
+      setIsSavingDoc(false);
+    }
   };
 
   const handleDeletePinnedPrompt = async (promptId: string) => {
@@ -1686,24 +1780,83 @@ export const Chat = ({
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                <a
-                  href={`/api/docs/${resolvedActiveDoc.id}/export?format=md`}
-                  className="rounded-full border border-border-strong px-3 py-1.5 text-xs font-medium text-text-secondary transition hover:border-text-primary hover:text-text-primary"
-                >
-                  Export .md
-                </a>
-                <a
-                  href={`/api/docs/${resolvedActiveDoc.id}/export?format=pdf`}
-                  className="rounded-full border border-border-strong px-3 py-1.5 text-xs font-medium text-text-secondary transition hover:border-text-primary hover:text-text-primary"
-                >
-                  Export PDF
-                </a>
+                {isEditingDoc ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleCancelEditingDoc}
+                      disabled={isSavingDoc}
+                      className="rounded-full border border-border-strong px-3 py-1.5 text-xs font-medium text-text-secondary transition hover:border-text-primary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleSaveDoc()}
+                      disabled={
+                        isSavingDoc ||
+                        docDraftContent.trim() === "" ||
+                        docDraftContent === resolvedActiveDoc.content
+                      }
+                      className="rounded-full bg-surface-raised px-3 py-1.5 text-xs font-medium text-text-primary transition hover:bg-surface disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {isSavingDoc ? "Saving..." : "Save changes"}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleStartEditingDoc}
+                      className="rounded-full border border-border-strong px-3 py-1.5 text-xs font-medium text-text-secondary transition hover:border-text-primary hover:text-text-primary"
+                    >
+                      Edit doc
+                    </button>
+                    <a
+                      href={`/api/docs/${resolvedActiveDoc.id}/export?format=md`}
+                      className="rounded-full border border-border-strong px-3 py-1.5 text-xs font-medium text-text-secondary transition hover:border-text-primary hover:text-text-primary"
+                    >
+                      Export .md
+                    </a>
+                    <a
+                      href={`/api/docs/${resolvedActiveDoc.id}/export?format=pdf`}
+                      className="rounded-full border border-border-strong px-3 py-1.5 text-xs font-medium text-text-secondary transition hover:border-text-primary hover:text-text-primary"
+                    >
+                      Export PDF
+                    </a>
+                  </>
+                )}
               </div>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto pt-6">
               <div className="mx-auto w-full max-w-4xl pb-10">
-                <MarkdownDocument content={resolvedActiveDoc.content} />
+                {isEditingDoc ? (
+                  <div className="grid gap-6 lg:grid-cols-2">
+                    <div className="overflow-hidden rounded-2xl border border-border-subtle bg-sidebar">
+                      <div className="border-b border-border-subtle px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+                        Markdown
+                      </div>
+                      <textarea
+                        value={docDraftContent}
+                        onChange={(event) => setDocDraftContent(event.target.value)}
+                        className="min-h-[420px] w-full resize-none bg-transparent px-4 py-4 font-mono text-sm leading-6 text-text-primary outline-none"
+                        spellCheck={false}
+                      />
+                    </div>
+
+                    <div className="overflow-hidden rounded-2xl border border-border-subtle bg-page">
+                      <div className="border-b border-border-subtle px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+                        Preview
+                      </div>
+                      <div className="p-4">
+                        <MarkdownDocument content={docDraftContent} />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <MarkdownDocument content={resolvedActiveDoc.content} />
+                )}
               </div>
             </div>
 
