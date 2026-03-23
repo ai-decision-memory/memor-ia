@@ -14,6 +14,7 @@ export type AgentDocRecord = AgentDocSummary & {
   content: string;
   session_id: string;
   source_chat_id: string | null;
+  workspace_id: string;
 };
 
 export type DocGenerationClarification = {

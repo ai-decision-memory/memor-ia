@@ -8,12 +8,19 @@ import type {
 
 const AGENT_DOCS_TABLE = "agent_docs";
 
-export async function getAgentDocs(sessionId: string) {
+export async function getAgentDocs({
+  sessionId,
+  workspaceId,
+}: {
+  sessionId: string;
+  workspaceId: string;
+}) {
   return await supabaseRequest<AgentDocSummary[]>({
     method: "GET",
     searchParams: {
       select: "id,title,kind,created_at,updated_at",
       session_id: `eq.${sessionId}`,
+      workspace_id: `eq.${workspaceId}`,
       order: "updated_at.desc",
     },
     tableName: AGENT_DOCS_TABLE,
@@ -46,12 +53,14 @@ export async function createAgentDoc({
   sessionId,
   sourceChatId,
   title,
+  workspaceId,
 }: {
   content: string;
   kind: AgentDocKind;
   sessionId: string;
   sourceChatId?: string | null;
   title: string;
+  workspaceId: string;
 }) {
   const docs = await supabaseRequest<AgentDocRecord[]>({
     body: {
@@ -60,6 +69,7 @@ export async function createAgentDoc({
       session_id: sessionId,
       source_chat_id: sourceChatId ?? null,
       title,
+      workspace_id: workspaceId,
     },
     method: "POST",
     prefer: "return=representation",

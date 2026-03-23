@@ -20,12 +20,15 @@ export default async function DocPage({ params }: DocPageProps) {
     <Chat
       activeChat={pageData.activeChat}
       activeDoc={pageData.activeDoc}
+      activeWorkspace={pageData.activeWorkspace}
       chats={pageData.chats}
       docs={pageData.docs}
       githubPatError={pageData.githubPatError}
       githubPatSession={pageData.githubPatSession}
       linearApiKeyError={pageData.linearApiKeyError}
       linearApiKeySession={pageData.linearApiKeySession}
+      pinnedPrompts={pageData.pinnedPrompts}
+      workspaces={pageData.workspaces}
     />
   );
 }
