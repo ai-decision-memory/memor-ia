@@ -1,3 +1,8 @@
+import {
+  buildSourceCitationsMarkdown,
+  normalizeSourceCitations,
+  type SourceCitation,
+} from "@/lib/citations";
 import { normalizeDocTitle } from "./title";
 
 type PdfFont = "bold" | "mono" | "regular";
@@ -276,12 +281,24 @@ export function buildDocDownloadName(title: string, extension: "md" | "pdf") {
   return `${baseName || "document"}.${extension}`;
 }
 
-export function createMarkdownExport(markdown: string) {
-  return `${markdown.trimEnd()}\n`;
+function appendSources(markdown: string, citations: SourceCitation[]) {
+  const sourceMarkdown = buildSourceCitationsMarkdown(citations);
+
+  if (!sourceMarkdown) {
+    return `${markdown.trimEnd()}\n`;
+  }
+
+  return `${markdown.trimEnd()}\n\n${sourceMarkdown}\n`;
 }
 
-export function createPdfExport(markdown: string) {
-  const pages = buildPdfPages(buildPdfLines(markdown));
+export function createMarkdownExport(markdown: string, citations: SourceCitation[] = []) {
+  return appendSources(markdown, normalizeSourceCitations(citations));
+}
+
+export function createPdfExport(markdown: string, citations: SourceCitation[] = []) {
+  const pages = buildPdfPages(
+    buildPdfLines(appendSources(markdown, normalizeSourceCitations(citations))),
+  );
   const fontRegularObjectId = 3;
   const fontBoldObjectId = 4;
   const fontMonoObjectId = 5;

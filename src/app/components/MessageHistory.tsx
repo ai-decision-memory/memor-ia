@@ -1,4 +1,6 @@
+import { extractSourceCitationsFromMessage } from "@/lib/citations";
 import { useEffect, useRef } from "react";
+import { SourceCitationList } from "./SourceCitationList";
 import { TextShimmer } from "./TextShimmer";
 
 type MessagePart = {
@@ -13,6 +15,7 @@ type ChatMessage = {
 };
 
 type MessageHistoryProps = {
+  githubOrgLogin?: string | null;
   messages: ChatMessage[];
   status: string;
 };
@@ -185,7 +188,11 @@ function renderPart(part: MessagePart, key: string) {
   return null;
 }
 
-export function MessageHistory({ messages, status }: MessageHistoryProps) {
+export function MessageHistory({
+  githubOrgLogin,
+  messages,
+  status,
+}: MessageHistoryProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const loggedToolCallsRef = useRef<Set<string>>(new Set());
@@ -272,6 +279,11 @@ export function MessageHistory({ messages, status }: MessageHistoryProps) {
       <div className="mx-auto max-w-[730px] space-y-5">
         {messages.map((message) => {
           const isUser = message.role === "user";
+          const citations = isUser
+            ? []
+            : extractSourceCitationsFromMessage(message, {
+                githubOrgLogin,
+              });
 
           if (isUser) {
             return (
@@ -294,6 +306,7 @@ export function MessageHistory({ messages, status }: MessageHistoryProps) {
                   renderPart(part, `${message.id}-${index}`),
                 )}
               </div>
+              {citations.length > 0 ? <SourceCitationList citations={citations} /> : null}
             </div>
           );
         })}
