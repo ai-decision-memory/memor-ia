@@ -1685,6 +1685,20 @@ export const Chat = ({
                   ) : null}
                 </div>
               </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <a
+                  href={`/api/docs/${resolvedActiveDoc.id}/export?format=md`}
+                  className="rounded-full border border-border-strong px-3 py-1.5 text-xs font-medium text-text-secondary transition hover:border-text-primary hover:text-text-primary"
+                >
+                  Export .md
+                </a>
+                <a
+                  href={`/api/docs/${resolvedActiveDoc.id}/export?format=pdf`}
+                  className="rounded-full border border-border-strong px-3 py-1.5 text-xs font-medium text-text-secondary transition hover:border-text-primary hover:text-text-primary"
+                >
+                  Export PDF
+                </a>
+              </div>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto pt-6">
