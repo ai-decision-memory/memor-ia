@@ -79,19 +79,32 @@ export async function createAgentDoc({
   return docs[0] ?? null;
 }
 
-export async function updateAgentDocTitle({
+export async function updateAgentDoc({
+  content,
   docId,
   sessionId,
   title,
 }: {
+  content?: string;
   docId: string;
   sessionId: string;
-  title: string;
+  title?: string;
 }) {
+  const body: {
+    content?: string;
+    title?: string;
+  } = {};
+
+  if (content !== undefined) {
+    body.content = content;
+  }
+
+  if (title !== undefined) {
+    body.title = title;
+  }
+
   const docs = await supabaseRequest<AgentDocRecord[]>({
-    body: {
-      title,
-    },
+    body,
     method: "PATCH",
     prefer: "return=representation",
     searchParams: {
