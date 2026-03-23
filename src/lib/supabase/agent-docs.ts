@@ -1,4 +1,5 @@
 import "server-only";
+import { normalizeSourceCitations, type SourceCitation } from "@/lib/citations";
 import { supabaseRequest } from "@/lib/supabase/rest";
 import type {
   AgentDocKind,
@@ -7,6 +8,17 @@ import type {
 } from "@/lib/docs/types";
 
 const AGENT_DOCS_TABLE = "agent_docs";
+
+function normalizeAgentDocRecord(doc: AgentDocRecord | null) {
+  if (!doc) {
+    return null;
+  }
+
+  return {
+    ...doc,
+    citations: normalizeSourceCitations(doc.citations),
+  };
+}
 
 export async function getAgentDocs({
   sessionId,
@@ -44,10 +56,11 @@ export async function getAgentDoc({
     tableName: AGENT_DOCS_TABLE,
   });
 
-  return docs[0] ?? null;
+  return normalizeAgentDocRecord(docs[0] ?? null);
 }
 
 export async function createAgentDoc({
+  citations = [],
   content,
   kind,
   sessionId,
@@ -55,6 +68,7 @@ export async function createAgentDoc({
   title,
   workspaceId,
 }: {
+  citations?: SourceCitation[];
   content: string;
   kind: AgentDocKind;
   sessionId: string;
@@ -64,6 +78,7 @@ export async function createAgentDoc({
 }) {
   const docs = await supabaseRequest<AgentDocRecord[]>({
     body: {
+      citations,
       content,
       kind,
       session_id: sessionId,
@@ -76,7 +91,7 @@ export async function createAgentDoc({
     tableName: AGENT_DOCS_TABLE,
   });
 
-  return docs[0] ?? null;
+  return normalizeAgentDocRecord(docs[0] ?? null);
 }
 
 export async function updateAgentDoc({
@@ -114,7 +129,7 @@ export async function updateAgentDoc({
     tableName: AGENT_DOCS_TABLE,
   });
 
-  return docs[0] ?? null;
+  return normalizeAgentDocRecord(docs[0] ?? null);
 }
 
 export async function deleteAgentDoc({

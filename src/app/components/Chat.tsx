@@ -1,5 +1,6 @@
 "use client";
 
+import type { SourceCitation } from "@/lib/citations";
 import { buildChatTitleFromMessages } from "@/lib/chats/title";
 import { buildDocFileName } from "@/lib/docs/title";
 import type {
@@ -27,6 +28,7 @@ import type { TemporaryChat } from "./ChatWorkspaceProvider";
 import { Composer } from "./Composer";
 import { MarkdownDocument } from "./MarkdownDocument";
 import { MessageHistory } from "./MessageHistory";
+import { SourceCitationList } from "./SourceCitationList";
 import { TextScramble } from "./TextScramble";
 
 type ChatSummary = {
@@ -43,6 +45,7 @@ type PersistedChat = ChatSummary & {
 };
 
 type PersistedDoc = AgentDocSummary & {
+  citations: SourceCitation[];
   content: string;
   source_chat_id: string | null;
   workspace_id: string;
@@ -1857,6 +1860,15 @@ export const Chat = ({
                 ) : (
                   <MarkdownDocument content={resolvedActiveDoc.content} />
                 )}
+                {resolvedActiveDoc.citations.length > 0 ? (
+                  <div className="mt-8">
+                    <SourceCitationList
+                      citations={resolvedActiveDoc.citations}
+                      title="Sources used"
+                      variant="full"
+                    />
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -1923,7 +1935,11 @@ export const Chat = ({
             ) : null}
 
             <div className="min-h-0 flex-1">
-              <MessageHistory messages={messages} status={displayedStatus} />
+              <MessageHistory
+                githubOrgLogin={githubPatSession?.orgLogin ?? null}
+                messages={messages}
+                status={displayedStatus}
+              />
             </div>
 
             {clientError ? (

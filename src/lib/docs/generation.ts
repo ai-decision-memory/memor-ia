@@ -43,6 +43,7 @@ Rules:
 - Ground everything in the provided conversation and clarification answers only.
 - Do not invent implementation details, product behavior, repositories, APIs, or decisions that are not supported by the transcript.
 - If some detail is missing but the document can still be useful, call out the gap plainly in the markdown.
+- Do not add a Sources or Citations section. That is attached separately.
 - The markdown must use only headings, paragraphs, bullet lists, numbered lists, blockquotes, links, and fenced code blocks.
 - Do not use HTML or markdown tables.
 - Return JSON only. Do not wrap it in code fences.

@@ -1,3 +1,5 @@
+import type { SourceCitation } from "@/lib/citations";
+
 export const AGENT_DOC_KINDS = ["technical", "user-facing"] as const;
 
 export type AgentDocKind = (typeof AGENT_DOC_KINDS)[number];
@@ -11,6 +13,7 @@ export type AgentDocSummary = {
 };
 
 export type AgentDocRecord = AgentDocSummary & {
+  citations: SourceCitation[];
   content: string;
   session_id: string;
   source_chat_id: string | null;

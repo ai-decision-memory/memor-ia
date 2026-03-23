@@ -37,9 +37,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
   }
 
   const format = request.nextUrl.searchParams.get("format");
+  const citations = doc.citations ?? [];
 
   if (format === "md") {
-    return new Response(createMarkdownExport(doc.content), {
+    return new Response(createMarkdownExport(doc.content, citations), {
       headers: buildHeaders(
         buildDocDownloadName(doc.title, "md"),
         "text/markdown; charset=utf-8",
@@ -48,7 +49,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   }
 
   if (format === "pdf") {
-    return new Response(createPdfExport(doc.content), {
+    return new Response(createPdfExport(doc.content, citations), {
       headers: buildHeaders(
         buildDocDownloadName(doc.title, "pdf"),
         "application/pdf",

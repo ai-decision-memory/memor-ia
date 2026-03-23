@@ -3,10 +3,12 @@ import {
   DOC_GENERATION_SYSTEM_PROMPT,
   parseDocGenerationDecision,
 } from "@/lib/docs/generation";
+import { extractSourceCitationsFromMessages } from "@/lib/citations";
 import { normalizeDocTitle } from "@/lib/docs/title";
 import type { DocGenerationClarification } from "@/lib/docs/types";
 import { getAgentChat } from "@/lib/supabase/agent-chats";
 import { createAgentDoc } from "@/lib/supabase/agent-docs";
+import { getGitHubPATSession } from "@/lib/supabase/github-pat-sessions";
 import { getAgentWorkspace } from "@/lib/supabase/agent-workspaces";
 import { openai } from "@ai-sdk/openai";
 import { generateText, type UIMessage } from "ai";
@@ -104,6 +106,10 @@ export async function POST(request: NextRequest) {
   }
 
   const clarifications = sanitizeClarifications(payload.clarifications);
+  const githubPatSession = await getGitHubPATSession(sessionId);
+  const citations = extractSourceCitationsFromMessages(messages, {
+    githubOrgLogin: githubPatSession?.github_org_login ?? null,
+  });
   const result = await generateText({
     model: openai("gpt-4o"),
     prompt: buildDocsGenerationPrompt({
@@ -122,6 +128,7 @@ export async function POST(request: NextRequest) {
   }
 
   const doc = await createAgentDoc({
+    citations,
     content: decision.markdown,
     kind: decision.kind,
     sessionId,
