@@ -1,6 +1,7 @@
 import type { UIMessage } from "ai";
 
 type MessagePartLike = {
+  errorText?: unknown;
   input?: unknown;
   output?: unknown;
   state?: unknown;
@@ -13,7 +14,7 @@ type MessageLike = Pick<UIMessage, "id"> & {
   parts?: MessagePartLike[];
 };
 
-type CitationExtractionOptions = {
+export type CitationExtractionOptions = {
   githubOrgLogin?: string | null;
   limit?: number;
 };
@@ -31,6 +32,7 @@ type CitationContext = {
 export type SourceCitation = {
   id: string;
   label: string;
+  preview: string | null;
   provider: CitationProvider;
   toolName: string;
   url: string | null;
@@ -50,6 +52,14 @@ function isCitationProvider(value: unknown): value is CitationProvider {
 
 function getStringValue(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function truncatePreview(value: string, maxLength = 180) {
+  if (value.length <= maxLength) {
+    return value;
+  }
+
+  return `${value.slice(0, maxLength - 3).trimEnd()}...`;
 }
 
 function getNullableUrl(value: unknown) {
@@ -301,6 +311,76 @@ function getCitationLabel(record: Record<string, unknown>, context: CitationCont
   return "";
 }
 
+function getCitationPreview(
+  record: Record<string, unknown>,
+  context: CitationContext,
+  label: string,
+) {
+  for (const key of [
+    "body",
+    "description",
+    "summary",
+    "message",
+    "excerpt",
+    "content",
+    "text",
+  ]) {
+    const value = getStringValue(record[key]);
+
+    if (value && value.toLowerCase() !== label.toLowerCase()) {
+      return truncatePreview(value.replace(/\s+/g, " "));
+    }
+  }
+
+  const repositoryLabel =
+    getStringValue(record.fullName) ||
+    getStringValue(record.full_name) ||
+    (() => {
+      const organizationLogin =
+        getStringValue(record.organizationLogin) ||
+        getStringValue(record.organization) ||
+        context.githubOrgLogin ||
+        "";
+      const repository =
+        getStringValue(record.repository) || getStringValue(record.repo);
+
+      if (organizationLogin && repository) {
+        return `${organizationLogin}/${repository}`;
+      }
+
+      return repository;
+    })();
+  const previewSegments = [
+    getStringValue(record.identifier),
+    getStringValue(record.state),
+    getStringValue(record.status),
+    getStringValue(record.project),
+    getStringValue(record.projectName),
+    getStringValue(record.team),
+    getStringValue(record.teamName),
+    repositoryLabel,
+    getStringValue(record.path),
+    (() => {
+      const sha = getStringValue(record.sha);
+      return sha ? `Commit ${sha.slice(0, 7)}` : "";
+    })(),
+    (() => {
+      const ref = getStringValue(record.ref);
+      return ref ? `Ref ${ref}` : "";
+    })(),
+  ].filter(Boolean);
+
+  if (previewSegments.length > 0) {
+    const preview = truncatePreview(previewSegments.join(" · "));
+
+    if (preview.toLowerCase() !== label.toLowerCase()) {
+      return preview;
+    }
+  }
+
+  return null;
+}
+
 function looksLikeCitationRecord(record: Record<string, unknown>) {
   return (
     URL_FIELDS.some((field) => getNullableUrl(record[field])) ||
@@ -370,6 +450,7 @@ function normalizeCitationRecord(
   const fallbackUrl = directUrl ? null : getFallbackUrl(record, context);
   const url = directUrl ?? fallbackUrl;
   const label = getCitationLabel(record, context);
+  const preview = getCitationPreview(record, context, label);
 
   if (!label && !url) {
     return null;
@@ -377,6 +458,7 @@ function normalizeCitationRecord(
 
   const citation = {
     label: label || "View source",
+    preview,
     provider: context.provider,
     toolName: context.toolName,
     url,
@@ -426,15 +508,26 @@ function dedupeCitations(citations: SourceCitation[], limit: number) {
   return [...uniqueCitations.values()];
 }
 
-function extractCitationsFromToolPart(
+export function extractSourceCitationsFromToolPart(
   part: MessagePartLike,
-  { githubOrgLogin }: CitationExtractionOptions,
+  { githubOrgLogin }: CitationExtractionOptions = {},
 ) {
-  if (part.type !== "dynamic-tool" || part.state !== "output-available") {
+  if (
+    part.state !== "output-available" ||
+    (
+      part.type !== "dynamic-tool" &&
+      !(typeof part.type === "string" && part.type.startsWith("tool-"))
+    )
+  ) {
     return [] as SourceCitation[];
   }
 
-  const toolName = typeof part.toolName === "string" ? part.toolName : "";
+  const toolName =
+    typeof part.toolName === "string"
+      ? part.toolName
+      : typeof part.type === "string" && part.type.startsWith("tool-")
+        ? part.type.slice("tool-".length)
+        : "";
   const provider = getCitationProvider(toolName);
 
   if (!provider) {
@@ -481,6 +574,7 @@ export function normalizeSourceCitations(value: unknown) {
 
       const citation = {
         label,
+        preview: getStringValue(item.preview) || null,
         provider: item.provider,
         toolName,
         url: getNullableUrl(item.url),
@@ -501,7 +595,9 @@ export function extractSourceCitationsFromMessage(
   options: CitationExtractionOptions = {},
 ) {
   const parts = Array.isArray(message.parts) ? message.parts : [];
-  const citations = parts.flatMap((part) => extractCitationsFromToolPart(part, options));
+  const citations = parts.flatMap((part) =>
+    extractSourceCitationsFromToolPart(part, options),
+  );
 
   return dedupeCitations(citations, options.limit ?? DEFAULT_MESSAGE_LIMIT);
 }

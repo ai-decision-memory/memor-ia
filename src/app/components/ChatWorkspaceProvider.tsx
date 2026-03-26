@@ -1,6 +1,6 @@
 "use client";
 
-import type { UIMessage } from "ai";
+import type { ChatUIMessage } from "@/lib/chat-messages";
 import {
   createContext,
   Dispatch,
@@ -14,7 +14,7 @@ import {
 type TemporaryChat = {
   created_at: string;
   id: string;
-  messages: UIMessage[];
+  messages: ChatUIMessage[];
   title: string;
   updated_at: string;
   workspace_id: string;

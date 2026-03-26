@@ -1,3 +1,4 @@
+import type { ChatUIMessage } from "@/lib/chat-messages";
 import { createGitHubOrgTools } from "@/lib/github/org-tools";
 import { createGitHubMCPClient } from "@/lib/mcp/github-mcp-client";
 import { createLinearMCPClient } from "@/lib/mcp/linear-mcp-client";
@@ -15,11 +16,11 @@ import {
   convertToModelMessages,
   stepCountIs,
   streamText,
-  type UIMessage,
 } from "ai";
 import { NextRequest } from "next/server";
 
 const TEMP_CHAT_ID_PREFIX = "temp-chat-";
+const MODEL_ID = "gpt-4o";
 
 export async function POST(request: NextRequest) {
   const sessionId = request.cookies.get("session_id")?.value;
@@ -44,7 +45,7 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "Linear API key not connected" }, { status: 401 });
   }
 
-  const { id: chatId, messages }: { id?: string; messages: UIMessage[] } =
+  const { id: chatId, messages }: { id?: string; messages: ChatUIMessage[] } =
     await request.json();
   const isTemporaryChat = !chatId || chatId.startsWith(TEMP_CHAT_ID_PREFIX);
 
@@ -106,14 +107,35 @@ export async function POST(request: NextRequest) {
 
   const result = streamText({
     system: systemPrompt,
-    model: openai("gpt-4o"),
+    model: openai(MODEL_ID),
     tools,
     stopWhen: stepCountIs(8),
     messages: await convertToModelMessages(messages),
   });
 
-  return result.toUIMessageStreamResponse({
+  return result.toUIMessageStreamResponse<ChatUIMessage>({
     originalMessages: messages,
+    messageMetadata: ({ part }) => {
+      if (part.type === "start") {
+        return {
+          createdAt: Date.now(),
+          model: MODEL_ID,
+        };
+      }
+
+      if (part.type === "finish") {
+        return {
+          completedAt: Date.now(),
+          finishReason: part.finishReason,
+          inputTokens: part.totalUsage.inputTokens,
+          outputTokens: part.totalUsage.outputTokens,
+          reasoningTokens: part.totalUsage.outputTokenDetails.reasoningTokens,
+          totalTokens: part.totalUsage.totalTokens,
+        };
+      }
+
+      return undefined;
+    },
     onFinish: async ({ messages: updatedMessages }) => {
       if (!isTemporaryChat) {
         await updateAgentChatMessages({

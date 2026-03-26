@@ -1,6 +1,6 @@
 import "server-only";
+import type { ChatUIMessage } from "@/lib/chat-messages";
 import { supabaseRequest } from "@/lib/supabase/rest";
-import type { UIMessage } from "ai";
 
 const AGENT_CHATS_TABLE = "agent_chats";
 
@@ -9,7 +9,7 @@ export type AgentChatRecord = {
   session_id: string;
   workspace_id: string;
   title: string;
-  messages: UIMessage[];
+  messages: ChatUIMessage[];
   created_at: string;
   updated_at: string;
 };
@@ -64,7 +64,7 @@ export async function createAgentChat({
   title,
   workspaceId,
 }: {
-  messages?: UIMessage[];
+  messages?: ChatUIMessage[];
   sessionId: string;
   title: string;
   workspaceId: string;
@@ -90,7 +90,7 @@ export async function updateAgentChatMessages({
   sessionId,
 }: {
   chatId: string;
-  messages: UIMessage[];
+  messages: ChatUIMessage[];
   sessionId: string;
 }) {
   const chats = await supabaseRequest<AgentChatRecord[]>({

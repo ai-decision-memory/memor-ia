@@ -3,9 +3,9 @@ import {
   DEFAULT_CHAT_TITLE,
   normalizeChatTitle,
 } from "@/lib/chats/title";
+import type { ChatUIMessage } from "@/lib/chat-messages";
 import { getAgentWorkspace } from "@/lib/supabase/agent-workspaces";
 import { createAgentChat, getAgentChats } from "@/lib/supabase/agent-chats";
-import type { UIMessage } from "ai";
 import { NextRequest } from "next/server";
 
 export async function GET(request: NextRequest) {
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
   }
 
   const payload = (await request.json()) as {
-    messages?: UIMessage[];
+    messages?: ChatUIMessage[];
     title?: string;
     workspaceId?: string;
   };

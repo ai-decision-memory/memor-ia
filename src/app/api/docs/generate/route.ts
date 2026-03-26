@@ -3,6 +3,7 @@ import {
   DOC_GENERATION_SYSTEM_PROMPT,
   parseDocGenerationDecision,
 } from "@/lib/docs/generation";
+import type { ChatUIMessage } from "@/lib/chat-messages";
 import { extractSourceCitationsFromMessages } from "@/lib/citations";
 import { normalizeDocTitle } from "@/lib/docs/title";
 import type { DocGenerationClarification } from "@/lib/docs/types";
@@ -11,7 +12,7 @@ import { createAgentDoc } from "@/lib/supabase/agent-docs";
 import { getGitHubPATSession } from "@/lib/supabase/github-pat-sessions";
 import { getAgentWorkspace } from "@/lib/supabase/agent-workspaces";
 import { openai } from "@ai-sdk/openai";
-import { generateText, type UIMessage } from "ai";
+import { generateText } from "ai";
 import { NextRequest } from "next/server";
 
 const TEMP_CHAT_ID_PREFIX = "temp-chat-";
@@ -59,7 +60,7 @@ export async function POST(request: NextRequest) {
   const payload = (await request.json()) as {
     chatId?: string | null;
     clarifications?: unknown;
-    messages?: UIMessage[];
+    messages?: ChatUIMessage[];
     workspaceId?: string | null;
   };
   const messages = Array.isArray(payload.messages) ? payload.messages : [];

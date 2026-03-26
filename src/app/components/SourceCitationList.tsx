@@ -24,30 +24,37 @@ export function SourceCitationList({
         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">
           {title}
         </p>
-        <ul className="mt-3 space-y-2 text-sm text-text-secondary">
+        <ul className="mt-3 grid gap-3 md:grid-cols-2">
           {citations.map((citation) => {
             const provider = formatSourceCitationProvider(citation.provider);
 
             return (
-              <li key={citation.id}>
+              <li
+                key={citation.id}
+                className="rounded-xl border border-border-subtle bg-page/70 p-3 text-sm text-text-secondary"
+              >
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-text-muted">
+                  {provider}
+                </p>
                 {citation.url ? (
                   <a
                     href={citation.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="transition hover:text-text-primary"
+                    className="mt-2 block font-medium text-text-primary transition hover:text-text-secondary"
                   >
-                    <span className="font-medium text-text-primary">{provider}</span>
-                    {": "}
                     {citation.label}
                   </a>
                 ) : (
-                  <span>
-                    <span className="font-medium text-text-primary">{provider}</span>
-                    {": "}
+                  <p className="mt-2 font-medium text-text-primary">
                     {citation.label}
-                  </span>
+                  </p>
                 )}
+                {citation.preview ? (
+                  <p className="mt-2 text-xs leading-5 text-text-secondary">
+                    {citation.preview}
+                  </p>
+                ) : null}
               </li>
             );
           })}

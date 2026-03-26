@@ -1,5 +1,6 @@
 "use client";
 
+import type { ChatUIMessage } from "@/lib/chat-messages";
 import type { SourceCitation } from "@/lib/citations";
 import { buildChatTitleFromMessages } from "@/lib/chats/title";
 import { buildDocFileName } from "@/lib/docs/title";
@@ -22,7 +23,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { UIMessage } from "ai";
 import { useChatWorkspace } from "./ChatWorkspaceProvider";
 import type { TemporaryChat } from "./ChatWorkspaceProvider";
 import { Composer } from "./Composer";
@@ -40,7 +40,7 @@ type ChatSummary = {
 };
 
 type PersistedChat = ChatSummary & {
-  messages: UIMessage[];
+  messages: ChatUIMessage[];
   workspace_id: string;
 };
 
@@ -714,7 +714,7 @@ export const Chat = ({
     sendMessage,
     status,
     stop,
-  } = useChat<UIMessage>({
+  } = useChat<ChatUIMessage>({
     id: activeChatId ?? NEW_CHAT_ID,
     messages: initialMessages,
     onFinish: async () => {},
@@ -867,7 +867,7 @@ export const Chat = ({
     messages: nextMessages,
     title,
   }: {
-    messages?: UIMessage[];
+    messages?: ChatUIMessage[];
     title?: string;
   } = {}) => {
     if (!currentWorkspaceId) {
