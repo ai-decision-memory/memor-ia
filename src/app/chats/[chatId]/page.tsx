@@ -27,7 +27,6 @@ export default async function ChatPage({ params }: ChatPageProps) {
       githubPatSession={pageData.githubPatSession}
       linearApiKeyError={pageData.linearApiKeyError}
       linearApiKeySession={pageData.linearApiKeySession}
-      pinnedPrompts={pageData.pinnedPrompts}
       workspaces={pageData.workspaces}
     />
   );

@@ -22,7 +22,6 @@ export default async function Home({ searchParams }: HomePageProps) {
       githubPatSession={pageData.githubPatSession}
       linearApiKeyError={pageData.linearApiKeyError}
       linearApiKeySession={pageData.linearApiKeySession}
-      pinnedPrompts={pageData.pinnedPrompts}
       workspaces={pageData.workspaces}
     />
   );

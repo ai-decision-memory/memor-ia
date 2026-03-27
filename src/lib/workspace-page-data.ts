@@ -1,5 +1,4 @@
 import "server-only";
-import { getAgentPinnedPrompts } from "@/lib/supabase/agent-pinned-prompts";
 import { getAgentDoc, getAgentDocs } from "@/lib/supabase/agent-docs";
 import { getAgentChat, getAgentChats } from "@/lib/supabase/agent-chats";
 import {
@@ -38,27 +37,6 @@ async function getSafeAgentWorkspace({
   } catch (error) {
     if (isSupabaseMissingTableError(error, "agent_workspaces")) {
       return null;
-    }
-
-    throw error;
-  }
-}
-
-async function getSafeAgentPinnedPrompts({
-  sessionId,
-  workspaceId,
-}: {
-  sessionId: string;
-  workspaceId: string;
-}) {
-  try {
-    return await getAgentPinnedPrompts({
-      sessionId,
-      workspaceId,
-    });
-  } catch (error) {
-    if (isSupabaseMissingTableError(error, "agent_pinned_prompts")) {
-      return [];
     }
 
     throw error;
@@ -131,7 +109,6 @@ export async function getWorkspacePageData({
       githubPatSession: null,
       linearApiKeyError,
       linearApiKeySession: null,
-      pinnedPrompts: [],
       sessionId: null,
       chats: [],
       docs: [],
@@ -180,7 +157,7 @@ export async function getWorkspacePageData({
         }
       : activeWorkspace;
   const resolvedWorkspaceId = resolvedActiveWorkspace?.id ?? fallbackWorkspace?.id ?? null;
-  const [chats, docs, pinnedPrompts] = resolvedWorkspaceId
+  const [chats, docs] = resolvedWorkspaceId
     ? await Promise.all([
         getAgentChats({
           sessionId,
@@ -190,12 +167,8 @@ export async function getWorkspacePageData({
           sessionId,
           workspaceId: resolvedWorkspaceId,
         }),
-        getSafeAgentPinnedPrompts({
-          sessionId,
-          workspaceId: resolvedWorkspaceId,
-        }),
       ])
-    : [[], [], []];
+    : [[], []];
 
   return {
     activeChat,
@@ -218,7 +191,6 @@ export async function getWorkspacePageData({
           userName: linearApiKeySession.linear_user_name,
         }
       : null,
-    pinnedPrompts,
     sessionId,
     workspaces,
   };
