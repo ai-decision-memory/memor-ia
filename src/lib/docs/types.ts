@@ -19,8 +19,3 @@ export type AgentDocRecord = AgentDocSummary & {
   source_chat_id: string | null;
   workspace_id: string;
 };
-
-export type DocGenerationClarification = {
-  answer: string;
-  question: string;
-};

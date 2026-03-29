@@ -4,11 +4,7 @@ import type { ChatUIMessage } from "@/lib/chat-messages";
 import type { SourceCitation } from "@/lib/citations";
 import { buildChatTitleFromMessages } from "@/lib/chats/title";
 import { buildDocFileName } from "@/lib/docs/title";
-import type {
-  AgentDocKind,
-  AgentDocSummary,
-  DocGenerationClarification,
-} from "@/lib/docs/types";
+import type { AgentDocKind, AgentDocSummary } from "@/lib/docs/types";
 import type { AgentWorkspaceSummary } from "@/lib/workspaces/types";
 import { useChat } from "@ai-sdk/react";
 import Link from "next/link";
@@ -358,61 +354,6 @@ function WorkspaceModal({
   );
 }
 
-function GenerateDocsClarificationModal({
-  answer,
-  error,
-  onAnswerChange,
-  onClose,
-  onSubmit,
-  question,
-  submitting,
-}: {
-  answer: string;
-  error: string | null;
-  onAnswerChange: (value: string) => void;
-  onClose: () => void;
-  onSubmit: () => void;
-  question: string;
-  submitting: boolean;
-}) {
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    onSubmit();
-  };
-
-  return (
-    <ConnectionModal onClose={onClose}>
-      <p className="text-sm font-medium text-text-primary">Clarify the doc</p>
-      <p className="mt-2 text-sm text-text-secondary">{question}</p>
-      {error ? (
-        <p className="mt-3 rounded-lg bg-red-950/40 p-2 text-xs text-red-400">{error}</p>
-      ) : null}
-      <form onSubmit={handleSubmit} className="mt-4 space-y-3">
-        <textarea
-          value={answer}
-          onChange={(event) => onAnswerChange(event.target.value)}
-          rows={4}
-          className="w-full resize-none rounded-lg bg-page px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-muted"
-          placeholder="Describe the feature or area to document, and say whether the doc should be technical or user-facing."
-          autoFocus
-        />
-        <div className="flex items-center justify-end gap-3 pt-1">
-          <button type="button" onClick={onClose} className="text-xs text-text-muted hover:text-text-primary">
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={!answer.trim() || submitting}
-            className="rounded-lg bg-accent px-4 py-1.5 text-xs font-medium text-accent-text transition hover:opacity-80 disabled:opacity-40"
-          >
-            {submitting ? "Generating..." : "Continue"}
-          </button>
-        </div>
-      </form>
-    </ConnectionModal>
-  );
-}
-
 function formatDocKindLabel(kind: AgentDocKind) {
   return kind === "user-facing" ? "User-facing" : "Technical";
 }
@@ -476,14 +417,6 @@ export const Chat = ({
   );
   const [renamingItem, setRenamingItem] = useState<SidebarMenuState>(null);
   const [deletingItem, setDeletingItem] = useState<SidebarMenuState>(null);
-  const [isGeneratingDoc, setIsGeneratingDoc] = useState(false);
-  const [docClarificationAnswer, setDocClarificationAnswer] = useState("");
-  const [docClarificationError, setDocClarificationError] = useState<string | null>(null);
-  const [docClarificationQuestion, setDocClarificationQuestion] =
-    useState<string | null>(null);
-  const [docClarifications, setDocClarifications] = useState<
-    DocGenerationClarification[]
-  >([]);
   const [showWorkspaceModal, setShowWorkspaceModal] = useState(false);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
@@ -712,27 +645,12 @@ export const Chat = ({
     displayedStatus !== "streaming" &&
     displayedStatus !== "submitted" &&
     !isPersistingChat;
-  const canGenerateDocs =
-    !isDocView &&
-    messages.length > 0 &&
-    displayedStatus !== "streaming" &&
-    displayedStatus !== "submitted" &&
-    !isGeneratingDoc;
-
-  const resetDocGenerationState = () => {
-    setDocClarificationAnswer("");
-    setDocClarificationError(null);
-    setDocClarificationQuestion(null);
-    setDocClarifications([]);
-    setIsGeneratingDoc(false);
-  };
 
   const resetDraftState = () => {
     stop();
     setClientError(null);
     setInput("");
     setPendingInitialPrompt(null);
-    resetDocGenerationState();
     clearTemporaryChat();
     setTransientPersistedChat(null);
     setMessages([]);
@@ -1074,98 +992,6 @@ export const Chat = ({
     }
   };
 
-  const handleGenerateDoc = async (
-    clarifications: DocGenerationClarification[] = docClarifications,
-  ) => {
-    if (!canGenerateDocs && clarifications.length === 0) {
-      return;
-    }
-
-    setClientError(null);
-    setDocClarificationError(null);
-    setIsGeneratingDoc(true);
-
-    try {
-      const response = await fetch("/api/docs/generate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          chatId: activePersistedChat?.id ?? currentTemporaryChat?.id ?? null,
-          clarifications,
-          messages,
-          workspaceId: currentWorkspaceId,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error((await response.text()) || "Failed to generate doc");
-      }
-
-      const payload = (await response.json()) as
-        | {
-            question: string;
-            status: "needs_clarification";
-          }
-        | {
-            doc: AgentDocSummary & {
-              source_chat_id: string | null;
-            };
-            status: "created";
-          };
-
-      if (payload.status === "needs_clarification") {
-        setDocClarificationQuestion(payload.question);
-        return;
-      }
-
-      setSidebarDocs((currentDocs) => [
-        {
-          created_at: payload.doc.created_at,
-          id: payload.doc.id,
-          kind: payload.doc.kind,
-          title: payload.doc.title,
-          updated_at: payload.doc.updated_at,
-        },
-        ...currentDocs.filter((doc) => doc.id !== payload.doc.id),
-      ]);
-      resetDocGenerationState();
-      router.push(`/docs/${payload.doc.id}`);
-    } catch (generationError) {
-      const errorMessage =
-        generationError instanceof Error
-          ? generationError.message
-          : "Failed to generate doc";
-
-      if (docClarificationQuestion) {
-        setDocClarificationError(errorMessage);
-      } else {
-        setClientError(errorMessage);
-      }
-    } finally {
-      setIsGeneratingDoc(false);
-    }
-  };
-
-  const handleSubmitDocClarification = async () => {
-    if (!docClarificationQuestion || !docClarificationAnswer.trim()) {
-      return;
-    }
-
-    const nextClarifications = [
-      ...docClarifications,
-      {
-        answer: docClarificationAnswer.trim(),
-        question: docClarificationQuestion,
-      },
-    ];
-
-    setDocClarificationAnswer("");
-    setDocClarifications(nextClarifications);
-    await handleGenerateDoc(nextClarifications);
-  };
-
   return (
     <div className="flex h-screen flex-col bg-sidebar lg:flex-row">
       <aside className="flex w-full flex-col px-4 py-4 text-text-primary lg:h-screen lg:w-72 lg:shrink-0">
@@ -1355,7 +1181,7 @@ export const Chat = ({
 
             {sidebarDocs.length === 0 ? (
               <div className="px-3 py-3 text-sm text-text-muted">
-                Generated docs will appear here.
+                Saved docs appear here.
               </div>
             ) : (
               sidebarDocs.map((doc) => {
@@ -1480,7 +1306,7 @@ export const Chat = ({
             <div className="mx-auto flex w-full max-w-4xl items-start justify-between gap-4 border-b border-border-subtle pb-4">
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">
-                  Generated Doc
+                  Doc
                 </p>
                 <h1 className="mt-1 truncate text-2xl font-semibold tracking-tight text-text-primary">
                   {buildDocFileName(resolvedActiveDoc.title)}
@@ -1603,7 +1429,7 @@ export const Chat = ({
           </>
         ) : (
           <>
-            <div className="mx-auto mb-3 flex w-full max-w-3xl items-center justify-between gap-3">
+            <div className="mx-auto mb-3 flex w-full max-w-3xl items-center gap-3">
               <div className="min-w-0">
                 {activeWorkspace ? (
                   <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">
@@ -1626,19 +1452,10 @@ export const Chat = ({
                   </div>
                 ) : (
                   <p className="text-xs text-text-muted">
-                    Turn the current conversation into a saved markdown doc when the scope is clear.
+                    Chats stay in the sidebar for this workspace. Saved docs remain available there too.
                   </p>
                 )}
               </div>
-
-              <button
-                type="button"
-                onClick={() => void handleGenerateDoc()}
-                disabled={!canGenerateDocs}
-                className="shrink-0 rounded-lg bg-surface-raised px-3 py-1.5 text-xs font-medium text-text-primary transition hover:bg-surface disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {isGeneratingDoc ? "Generating..." : "Generate docs"}
-              </button>
             </div>
 
             <div className="min-h-0 flex-1">
@@ -1699,7 +1516,7 @@ export const Chat = ({
           description={
             deletingItem.kind === "chat"
               ? "This will permanently delete this chat and all its messages."
-              : "This will permanently delete this generated markdown doc."
+              : "This will permanently delete this doc."
           }
           itemLabel={getItemLabel(deletingItem.kind)}
           onClose={() => setDeletingItem(null)}
@@ -1722,18 +1539,6 @@ export const Chat = ({
           }}
           onSubmit={(title) => void handleCreateWorkspace(title)}
           submitting={isCreatingWorkspace}
-        />
-      ) : null}
-
-      {docClarificationQuestion ? (
-        <GenerateDocsClarificationModal
-          answer={docClarificationAnswer}
-          error={docClarificationError}
-          onAnswerChange={setDocClarificationAnswer}
-          onClose={resetDocGenerationState}
-          onSubmit={() => void handleSubmitDocClarification()}
-          question={docClarificationQuestion}
-          submitting={isGeneratingDoc}
         />
       ) : null}
     </div>
