@@ -323,7 +323,7 @@ function WorkspaceModal({
     <ConnectionModal onClose={onClose}>
       <p className="text-sm font-medium text-text-primary">Create workspace</p>
       <p className="mt-1 text-xs text-text-muted">
-        Workspaces group chats and docs.
+        Workspaces group chats.
       </p>
       {error ? (
         <p className="mt-3 rounded-lg bg-red-950/40 p-2 text-xs text-red-400">{error}</p>
@@ -1169,90 +1169,6 @@ export const Chat = ({
             ) : null}
           </div>
 
-          <div className="mt-6 border-t border-border-subtle pt-4">
-            <div className="mb-2 flex items-center justify-between px-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">
-                Docs
-              </p>
-              <span className="text-[11px] text-text-muted">
-                {sidebarDocs.length}
-              </span>
-            </div>
-
-            {sidebarDocs.length === 0 ? (
-              <div className="px-3 py-3 text-sm text-text-muted">
-                Saved docs appear here.
-              </div>
-            ) : (
-              sidebarDocs.map((doc) => {
-                const isActive = resolvedActiveDoc?.id === doc.id;
-                const isMenuOpen =
-                  openMenu?.kind === "doc" && openMenu.id === doc.id;
-
-                return (
-                  <div
-                    key={doc.id}
-                    className={`flex items-center gap-2 rounded-lg px-3 py-2 transition ${
-                      isActive
-                        ? "bg-page text-text-primary"
-                        : "text-text-secondary hover:bg-surface-raised hover:text-text-primary"
-                    }`}
-                  >
-                    <Link href={`/docs/${doc.id}`} className="min-w-0 flex-1">
-                      <p className="truncate text-sm">
-                        <TextScramble>{buildDocFileName(doc.title)}</TextScramble>
-                      </p>
-                      <div className="mt-0.5 flex items-center gap-2 text-xs text-text-muted">
-                        <span>{formatDocKindLabel(doc.kind)}</span>
-                        <span>{formatRelativeTimestamp(doc.updated_at)}</span>
-                      </div>
-                    </Link>
-                    <div
-                      className="relative self-center shrink-0"
-                      ref={isMenuOpen ? menuRef : undefined}
-                    >
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setOpenMenu(
-                            isMenuOpen ? null : { id: doc.id, kind: "doc" },
-                          );
-                        }}
-                        className="flex h-6 w-6 items-center justify-center rounded text-sm leading-none text-text-muted transition hover:text-text-primary"
-                      >
-                        &#x22EF;
-                      </button>
-                      {isMenuOpen ? (
-                        <div className="absolute right-0 top-full z-10 mt-1 w-32 rounded-lg bg-page py-1 shadow-lg">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setOpenMenu(null);
-                              setRenamingItem({ id: doc.id, kind: "doc" });
-                            }}
-                            className="block w-full px-3 py-1.5 text-left text-xs text-text-secondary hover:text-text-primary"
-                          >
-                            Rename
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setOpenMenu(null);
-                              setDeletingItem({ id: doc.id, kind: "doc" });
-                            }}
-                            className="block w-full px-3 py-1.5 text-left text-xs text-red-400 hover:text-red-300"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
         </nav>
 
         <div className="group mt-3 shrink-0 rounded-xl transition-colors duration-300 hover:bg-page">
@@ -1452,7 +1368,7 @@ export const Chat = ({
                   </div>
                 ) : (
                   <p className="text-xs text-text-muted">
-                    Chats stay in the sidebar for this workspace. Saved docs remain available there too.
+                    Chats stay in the sidebar for this workspace.
                   </p>
                 )}
               </div>

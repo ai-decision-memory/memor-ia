@@ -1,5 +1,4 @@
 import "server-only";
-import { getAgentDoc, getAgentDocs } from "@/lib/supabase/agent-docs";
 import { getAgentChat, getAgentChats } from "@/lib/supabase/agent-chats";
 import {
   ensureAgentWorkspace,
@@ -43,48 +42,6 @@ async function getSafeAgentWorkspace({
   }
 }
 
-async function getSafeAgentDocs({
-  sessionId,
-  workspaceId,
-}: {
-  sessionId: string;
-  workspaceId: string;
-}) {
-  try {
-    return await getAgentDocs({
-      sessionId,
-      workspaceId,
-    });
-  } catch (error) {
-    if (isSupabaseMissingTableError(error, "agent_docs")) {
-      return [];
-    }
-
-    throw error;
-  }
-}
-
-async function getSafeAgentDoc({
-  docId,
-  sessionId,
-}: {
-  docId: string;
-  sessionId: string;
-}) {
-  try {
-    return await getAgentDoc({
-      docId,
-      sessionId,
-    });
-  } catch (error) {
-    if (isSupabaseMissingTableError(error, "agent_docs")) {
-      return null;
-    }
-
-    throw error;
-  }
-}
-
 export async function getWorkspacePageData({
   activeChatId,
   activeDocId,
@@ -116,7 +73,7 @@ export async function getWorkspacePageData({
     };
   }
 
-  const [githubPatSession, linearApiKeySession, workspaces, activeChat, activeDoc] =
+  const [githubPatSession, linearApiKeySession, workspaces, activeChat] =
     await Promise.all([
       getGitHubPATSession(sessionId),
       getLinearApiKeySession(sessionId),
@@ -124,17 +81,11 @@ export async function getWorkspacePageData({
       activeChatId
         ? getAgentChat({ chatId: activeChatId, sessionId })
         : Promise.resolve(null),
-      activeDocId
-        ? getSafeAgentDoc({ docId: activeDocId, sessionId })
-        : Promise.resolve(null),
     ]);
 
   const fallbackWorkspace = workspaces[0] ?? null;
   const activeWorkspaceFromChat = activeChat?.workspace_id
     ? workspaces.find((workspace) => workspace.id === activeChat.workspace_id) ?? null
-    : null;
-  const activeWorkspaceFromDoc = activeDoc?.workspace_id
-    ? workspaces.find((workspace) => workspace.id === activeDoc.workspace_id) ?? null
     : null;
   const requestedWorkspace = activeWorkspaceId
     ? await getSafeAgentWorkspace({
@@ -144,7 +95,6 @@ export async function getWorkspacePageData({
     : null;
   const activeWorkspace =
     activeWorkspaceFromChat ??
-    activeWorkspaceFromDoc ??
     requestedWorkspace ??
     fallbackWorkspace;
   const resolvedActiveWorkspace =
@@ -157,25 +107,19 @@ export async function getWorkspacePageData({
         }
       : activeWorkspace;
   const resolvedWorkspaceId = resolvedActiveWorkspace?.id ?? fallbackWorkspace?.id ?? null;
-  const [chats, docs] = resolvedWorkspaceId
-    ? await Promise.all([
-        getAgentChats({
-          sessionId,
-          workspaceId: resolvedWorkspaceId,
-        }),
-        getSafeAgentDocs({
-          sessionId,
-          workspaceId: resolvedWorkspaceId,
-        }),
-      ])
-    : [[], []];
+  const chats = resolvedWorkspaceId
+    ? await getAgentChats({
+        sessionId,
+        workspaceId: resolvedWorkspaceId,
+      })
+    : [];
 
   return {
     activeChat,
-    activeDoc,
+    activeDoc: null,
     activeWorkspace: resolvedActiveWorkspace,
     chats,
-    docs,
+    docs: [],
     githubPatError,
     githubPatSession: githubPatSession
       ? {
