@@ -24,14 +24,14 @@ export async function getAgentChats({
   workspaceId,
 }: {
   sessionId: string;
-  workspaceId: string;
+  workspaceId?: string;
 }) {
   return await supabaseRequest<AgentChatListItem[]>({
     method: "GET",
     searchParams: {
       select: "id,title,created_at,updated_at",
       session_id: `eq.${sessionId}`,
-      workspace_id: `eq.${workspaceId}`,
+      ...(workspaceId ? { workspace_id: `eq.${workspaceId}` } : {}),
       order: "updated_at.desc",
     },
     tableName: AGENT_CHATS_TABLE,

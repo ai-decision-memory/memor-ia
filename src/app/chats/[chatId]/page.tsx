@@ -20,14 +20,12 @@ export default async function ChatPage({ params }: ChatPageProps) {
     <Chat
       activeChat={pageData.activeChat}
       activeDoc={pageData.activeDoc}
-      activeWorkspace={pageData.activeWorkspace}
       chats={pageData.chats}
       docs={pageData.docs}
       githubPatError={pageData.githubPatError}
       githubPatSession={pageData.githubPatSession}
       linearApiKeyError={pageData.linearApiKeyError}
       linearApiKeySession={pageData.linearApiKeySession}
-      workspaces={pageData.workspaces}
     />
   );
 }

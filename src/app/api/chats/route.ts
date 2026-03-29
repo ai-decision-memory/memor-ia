@@ -4,7 +4,7 @@ import {
   normalizeChatTitle,
 } from "@/lib/chats/title";
 import type { ChatUIMessage } from "@/lib/chat-messages";
-import { getAgentWorkspace } from "@/lib/supabase/agent-workspaces";
+import { ensureAgentWorkspace } from "@/lib/supabase/agent-workspaces";
 import { createAgentChat, getAgentChats } from "@/lib/supabase/agent-chats";
 import { NextRequest } from "next/server";
 
@@ -15,16 +15,7 @@ export async function GET(request: NextRequest) {
     return Response.json({ chats: [] });
   }
 
-  const workspaceId = request.nextUrl.searchParams.get("workspaceId");
-
-  if (!workspaceId) {
-    return Response.json({ chats: [] });
-  }
-
-  const chats = await getAgentChats({
-    sessionId,
-    workspaceId,
-  });
+  const chats = await getAgentChats({ sessionId });
   return Response.json({ chats });
 }
 
@@ -38,23 +29,13 @@ export async function POST(request: NextRequest) {
   const payload = (await request.json()) as {
     messages?: ChatUIMessage[];
     title?: string;
-    workspaceId?: string;
   };
-  const workspaceId =
-    typeof payload.workspaceId === "string" ? payload.workspaceId : "";
   const messages = Array.isArray(payload.messages) ? payload.messages : [];
 
-  if (!workspaceId) {
-    return Response.json({ error: "Workspace not found" }, { status: 400 });
-  }
-
-  const workspace = await getAgentWorkspace({
-    sessionId,
-    workspaceId,
-  });
+  const [workspace] = await ensureAgentWorkspace(sessionId);
 
   if (!workspace) {
-    return Response.json({ error: "Workspace not found" }, { status: 404 });
+    return Response.json({ error: "Failed to initialize chat scope" }, { status: 500 });
   }
 
   const title = normalizeChatTitle(

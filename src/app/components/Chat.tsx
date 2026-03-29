@@ -5,7 +5,6 @@ import type { SourceCitation } from "@/lib/citations";
 import { buildChatTitleFromMessages } from "@/lib/chats/title";
 import { buildDocFileName } from "@/lib/docs/title";
 import type { AgentDocKind, AgentDocSummary } from "@/lib/docs/types";
-import type { AgentWorkspaceSummary } from "@/lib/workspaces/types";
 import { useChat } from "@ai-sdk/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -31,12 +30,10 @@ type ChatSummary = {
   id: string;
   title: string;
   updated_at: string;
-  workspace_id?: string;
 };
 
 type PersistedChat = ChatSummary & {
   messages: ChatUIMessage[];
-  workspace_id: string;
 };
 
 type PersistedDoc = AgentDocSummary & {
@@ -67,7 +64,7 @@ const NEW_CHAT_ID = "new-chat";
 const TEMP_CHAT_ID_PREFIX = "temp-chat-";
 const TEMPORARY_CHAT_TITLE = "Temporary chat";
 
-function createTemporaryChat(workspaceId: string): TemporaryChat {
+function createTemporaryChat(): TemporaryChat {
   const now = new Date().toISOString();
 
   return {
@@ -76,7 +73,6 @@ function createTemporaryChat(workspaceId: string): TemporaryChat {
     messages: [],
     title: TEMPORARY_CHAT_TITLE,
     updated_at: now,
-    workspace_id: workspaceId,
   };
 }
 
@@ -301,59 +297,6 @@ function DeleteItemModal({
   );
 }
 
-function WorkspaceModal({
-  error,
-  onClose,
-  onSubmit,
-  submitting,
-}: {
-  error: string | null;
-  onClose: () => void;
-  onSubmit: (title: string) => void;
-  submitting: boolean;
-}) {
-  const [title, setTitle] = useState("");
-
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    onSubmit(title);
-  };
-
-  return (
-    <ConnectionModal onClose={onClose}>
-      <p className="text-sm font-medium text-text-primary">Create workspace</p>
-      <p className="mt-1 text-xs text-text-muted">
-        Workspaces group chats.
-      </p>
-      {error ? (
-        <p className="mt-3 rounded-lg bg-red-950/40 p-2 text-xs text-red-400">{error}</p>
-      ) : null}
-      <form onSubmit={handleSubmit} className="mt-4 space-y-3">
-        <input
-          type="text"
-          value={title}
-          onChange={(event) => setTitle(event.target.value)}
-          placeholder="Growth team"
-          className="w-full rounded-lg bg-page px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-muted"
-          autoFocus
-        />
-        <div className="flex items-center justify-end gap-3 pt-1">
-          <button type="button" onClick={onClose} className="text-xs text-text-muted hover:text-text-primary">
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={!title.trim() || submitting}
-            className="rounded-lg bg-accent px-4 py-1.5 text-xs font-medium text-accent-text transition hover:opacity-80 disabled:opacity-40"
-          >
-            {submitting ? "Creating..." : "Create"}
-          </button>
-        </div>
-      </form>
-    </ConnectionModal>
-  );
-}
-
 function formatDocKindLabel(kind: AgentDocKind) {
   return kind === "user-facing" ? "User-facing" : "Technical";
 }
@@ -369,18 +312,15 @@ function getItemLabel(kind: "chat" | "doc") {
 export const Chat = ({
   activeChat,
   activeDoc,
-  activeWorkspace,
   chats,
   docs,
   githubPatError,
   githubPatSession,
   linearApiKeyError,
   linearApiKeySession,
-  workspaces,
 }: {
   activeChat: PersistedChat | null;
   activeDoc: PersistedDoc | null;
-  activeWorkspace: AgentWorkspaceSummary | null;
   chats: ChatSummary[];
   docs: AgentDocSummary[];
   githubPatError: string | null;
@@ -394,7 +334,6 @@ export const Chat = ({
     teamName: string;
     userName: string;
   } | null;
-  workspaces: AgentWorkspaceSummary[];
 }) => {
   const router = useRouter();
   const { clearTemporaryChat, setTemporaryChat, temporaryChat } = useChatWorkspace();
@@ -405,8 +344,6 @@ export const Chat = ({
   const [pendingInitialPrompt, setPendingInitialPrompt] = useState<string | null>(null);
   const [sidebarChats, setSidebarChats] = useState<ChatSummary[]>(chats);
   const [sidebarDocs, setSidebarDocs] = useState<AgentDocSummary[]>(docs);
-  const [sidebarWorkspaces, setSidebarWorkspaces] =
-    useState<AgentWorkspaceSummary[]>(workspaces);
   const [transientPersistedChat, setTransientPersistedChat] =
     useState<PersistedChat | null>(null);
   const [localActiveDoc, setLocalActiveDoc] = useState<PersistedDoc | null>(activeDoc);
@@ -417,9 +354,6 @@ export const Chat = ({
   );
   const [renamingItem, setRenamingItem] = useState<SidebarMenuState>(null);
   const [deletingItem, setDeletingItem] = useState<SidebarMenuState>(null);
-  const [showWorkspaceModal, setShowWorkspaceModal] = useState(false);
-  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
-  const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
   const [isEditingDoc, setIsEditingDoc] = useState(false);
   const [docDraftContent, setDocDraftContent] = useState(activeDoc?.content ?? "");
   const [isSavingDoc, setIsSavingDoc] = useState(false);
@@ -438,11 +372,7 @@ export const Chat = ({
   }, [closeSidebarMenu, openMenu]);
 
   const allConnected = !!githubPatSession && !!linearApiKeySession;
-  const currentWorkspaceId = activeWorkspace?.id ?? null;
-  const currentTemporaryChat =
-    temporaryChat && temporaryChat.workspace_id === currentWorkspaceId
-      ? temporaryChat
-      : null;
+  const currentTemporaryChat = temporaryChat;
 
   const isDocView = !!activeDoc;
   const activePersistedChat =
@@ -578,10 +508,6 @@ export const Chat = ({
   }, [docs]);
 
   useEffect(() => {
-    setSidebarWorkspaces(workspaces);
-  }, [workspaces]);
-
-  useEffect(() => {
     if (activeChat?.id) {
       setTransientPersistedChat(null);
     }
@@ -658,7 +584,7 @@ export const Chat = ({
 
   const handleStartNewChat = () => {
     resetDraftState();
-    router.push(currentWorkspaceId ? `/?workspaceId=${currentWorkspaceId}` : "/");
+    router.push("/");
   };
 
   const moveChatToTop = (chatId: string) => {
@@ -688,10 +614,6 @@ export const Chat = ({
     messages?: ChatUIMessage[];
     title?: string;
   } = {}) => {
-    if (!currentWorkspaceId) {
-      throw new Error("Workspace not found");
-    }
-
     const response = await fetch("/api/chats", {
       method: "POST",
       headers: {
@@ -700,7 +622,6 @@ export const Chat = ({
       body: JSON.stringify({
         ...(Array.isArray(nextMessages) ? { messages: nextMessages } : {}),
         ...(title ? { title } : {}),
-        workspaceId: currentWorkspaceId,
       }),
     });
 
@@ -713,46 +634,6 @@ export const Chat = ({
     };
 
     return payload.chat;
-  };
-
-  const handleCreateWorkspace = async (title: string) => {
-    setWorkspaceError(null);
-    setIsCreatingWorkspace(true);
-
-    try {
-      const response = await fetch("/api/workspaces", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ title }),
-      });
-
-      if (!response.ok) {
-        throw new Error((await response.text()) || "Failed to create workspace");
-      }
-
-      const payload = (await response.json()) as {
-        workspace: AgentWorkspaceSummary;
-      };
-
-      setSidebarWorkspaces((currentWorkspaces) => [
-        payload.workspace,
-        ...currentWorkspaces.filter(
-          (workspace) => workspace.id !== payload.workspace.id,
-        ),
-      ]);
-      setShowWorkspaceModal(false);
-      router.push(`/?workspaceId=${payload.workspace.id}`);
-    } catch (createError) {
-      setWorkspaceError(
-        createError instanceof Error
-          ? createError.message
-          : "Failed to create workspace",
-      );
-    } finally {
-      setIsCreatingWorkspace(false);
-    }
   };
 
   const handleSendMessage = async ({ text }: { text: string }) => {
@@ -769,14 +650,14 @@ export const Chat = ({
       return;
     }
 
-    if (isStartingTemporaryChat || !currentWorkspaceId) {
+    if (isStartingTemporaryChat) {
       return;
     }
 
     setIsStartingTemporaryChat(true);
 
     try {
-      setTemporaryChat(createTemporaryChat(currentWorkspaceId));
+      setTemporaryChat(createTemporaryChat());
       setPendingInitialPrompt(text);
     } catch (createError) {
       setClientError(
@@ -811,7 +692,6 @@ export const Chat = ({
       setTransientPersistedChat({
         ...createdChat,
         messages,
-        workspace_id: currentTemporaryChat.workspace_id,
       });
       clearTemporaryChat();
       window.history.replaceState(null, "", `/chats/${createdChat.id}`);
@@ -835,7 +715,7 @@ export const Chat = ({
     );
 
     if (activeChatId === chatId) {
-      router.push(currentWorkspaceId ? `/?workspaceId=${currentWorkspaceId}` : "/");
+      router.push("/");
     }
 
     try {
@@ -864,7 +744,7 @@ export const Chat = ({
     );
 
     if (resolvedActiveDoc?.id === docId) {
-      router.push(currentWorkspaceId ? `/?workspaceId=${currentWorkspaceId}` : "/");
+      router.push("/");
     }
 
     try {
@@ -997,7 +877,7 @@ export const Chat = ({
       <aside className="flex w-full flex-col px-4 py-4 text-text-primary lg:h-screen lg:w-72 lg:shrink-0">
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs font-semibold uppercase tracking-[0.15em] text-text-muted">
-            Workspace
+            Chats
           </p>
           <button
             type="button"
@@ -1012,59 +892,6 @@ export const Chat = ({
           <div>
             <div className="mb-2 flex items-center justify-between px-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">
-                Workspaces
-              </p>
-              <button
-                type="button"
-                onClick={() => {
-                  setWorkspaceError(null);
-                  setShowWorkspaceModal(true);
-                }}
-                className="text-xs text-text-muted transition hover:text-text-primary"
-              >
-                + New
-              </button>
-            </div>
-
-            {sidebarWorkspaces.length === 0 ? (
-              <div className="px-3 py-3 text-sm text-text-muted">
-                No workspaces yet.
-              </div>
-            ) : (
-              sidebarWorkspaces.map((workspace) => {
-                const isActive = workspace.id === currentWorkspaceId;
-
-                return (
-                  <button
-                    key={workspace.id}
-                    type="button"
-                    onClick={() => {
-                      resetDraftState();
-                      router.push(`/?workspaceId=${workspace.id}`);
-                    }}
-                    className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition ${
-                      isActive
-                        ? "bg-page text-text-primary"
-                        : "text-text-secondary hover:bg-surface-raised hover:text-text-primary"
-                    }`}
-                  >
-                    <p className="truncate text-sm">
-                      <TextScramble>{workspace.title}</TextScramble>
-                    </p>
-                    {isActive ? (
-                      <span className="rounded-full border border-border-strong px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] text-text-muted">
-                        Active
-                      </span>
-                    ) : null}
-                  </button>
-                );
-              })
-            )}
-          </div>
-
-          <div className="mt-6 border-t border-border-subtle pt-4">
-            <div className="mb-2 flex items-center justify-between px-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">
                 Chats
               </p>
               <span className="text-[11px] text-text-muted">
@@ -1074,7 +901,7 @@ export const Chat = ({
 
             {sidebarChats.length === 0 && !currentTemporaryChat ? (
               <div className="px-3 py-3 text-sm text-text-muted">
-                No chats yet in this workspace.
+                No chats yet.
               </div>
             ) : null}
 
@@ -1145,9 +972,7 @@ export const Chat = ({
             {currentTemporaryChat ? (
               <button
                 type="button"
-                onClick={() =>
-                  router.push(currentWorkspaceId ? `/?workspaceId=${currentWorkspaceId}` : "/")
-                }
+                onClick={() => router.push("/")}
                 className={`mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed px-3 py-2 text-left transition ${
                   isTemporaryChatActive
                     ? "border-text-secondary bg-page text-text-primary"
@@ -1228,11 +1053,6 @@ export const Chat = ({
                   {buildDocFileName(resolvedActiveDoc.title)}
                 </h1>
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-text-muted">
-                  {activeWorkspace ? (
-                    <span className="rounded-full border border-border-strong px-2 py-1">
-                      {activeWorkspace.title}
-                    </span>
-                  ) : null}
                   <span className="rounded-full border border-border-strong px-2 py-1">
                     {formatDocKindLabel(resolvedActiveDoc.kind)}
                   </span>
@@ -1347,11 +1167,6 @@ export const Chat = ({
           <>
             <div className="mx-auto mb-3 flex w-full max-w-3xl items-center gap-3">
               <div className="min-w-0">
-                {activeWorkspace ? (
-                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">
-                    {activeWorkspace.title}
-                  </p>
-                ) : null}
                 {isTemporaryChatActive ? (
                   <div className="flex items-center gap-3">
                     <button
@@ -1368,7 +1183,7 @@ export const Chat = ({
                   </div>
                 ) : (
                   <p className="text-xs text-text-muted">
-                    Chats stay in the sidebar for this workspace.
+                    Chats stay in the sidebar.
                   </p>
                 )}
               </div>
@@ -1443,18 +1258,6 @@ export const Chat = ({
                 : handleDeleteDoc(deletingItem.id)
             )
           }
-        />
-      ) : null}
-
-      {showWorkspaceModal ? (
-        <WorkspaceModal
-          error={workspaceError}
-          onClose={() => {
-            setWorkspaceError(null);
-            setShowWorkspaceModal(false);
-          }}
-          onSubmit={(title) => void handleCreateWorkspace(title)}
-          submitting={isCreatingWorkspace}
         />
       ) : null}
     </div>

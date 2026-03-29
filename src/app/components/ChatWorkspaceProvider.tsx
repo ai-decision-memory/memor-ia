@@ -17,7 +17,6 @@ type TemporaryChat = {
   messages: ChatUIMessage[];
   title: string;
   updated_at: string;
-  workspace_id: string;
 };
 
 type ChatWorkspaceContextValue = {
