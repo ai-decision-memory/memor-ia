@@ -19,7 +19,7 @@ function normalizePrompt(prompt: string) {
   return prompt.replace(/\s+/g, " ").trim();
 }
 
-function truncateTitle(value: string) {
+function truncateText(value: string) {
   if (value.length <= 80) {
     return value;
   }
@@ -119,18 +119,18 @@ function getToolInputTitle(toolName: string, input: unknown) {
 
   if (provider === "GitHub" && repo) {
     if (subject && subject !== "repositories") {
-      return truncateTitle(`GitHub ${repo} ${subject}`);
+      return truncateText(`GitHub ${repo} ${subject}`);
     }
 
-    return truncateTitle(`GitHub ${repo}`);
+    return truncateText(`GitHub ${repo}`);
   }
 
   if (provider && subject) {
-    return truncateTitle(`${provider} ${subject}`);
+    return truncateText(`${provider} ${subject}`);
   }
 
   if (provider) {
-    return truncateTitle(`${provider} chat`);
+    return truncateText(`${provider} chat`);
   }
 
   return null;
@@ -164,6 +164,11 @@ export function normalizeChatTitle(title: string | null | undefined) {
   return normalizedTitle || DEFAULT_CHAT_TITLE;
 }
 
+export function normalizeChatGroupName(groupName: string | null | undefined) {
+  const normalizedGroupName = normalizePrompt(groupName ?? "");
+  return normalizedGroupName ? truncateText(normalizedGroupName) : null;
+}
+
 export function buildChatTitleFromPrompt(prompt: string) {
   const normalizedPrompt = normalizePrompt(prompt);
 
@@ -171,7 +176,7 @@ export function buildChatTitleFromPrompt(prompt: string) {
     return DEFAULT_CHAT_TITLE;
   }
 
-  return truncateTitle(normalizedPrompt);
+  return truncateText(normalizedPrompt);
 }
 
 export function buildChatTitleFromMessages(messages: UIMessage[]) {

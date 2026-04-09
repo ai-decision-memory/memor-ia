@@ -1,6 +1,7 @@
 import {
   buildChatTitleFromMessages,
   DEFAULT_CHAT_TITLE,
+  normalizeChatGroupName,
   normalizeChatTitle,
 } from "@/lib/chats/title";
 import type { ChatUIMessage } from "@/lib/chat-messages";
@@ -26,7 +27,8 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "Session not found" }, { status: 401 });
   }
 
-  const payload = (await request.json()) as {
+  const payload = ((await request.json()) ?? {}) as {
+    groupName?: string | null;
     messages?: ChatUIMessage[];
     title?: string;
   };
@@ -46,6 +48,7 @@ export async function POST(request: NextRequest) {
         : DEFAULT_CHAT_TITLE,
   );
   const chat = await createAgentChat({
+    groupName: normalizeChatGroupName(payload.groupName),
     messages,
     sessionId,
     title,
@@ -59,6 +62,7 @@ export async function POST(request: NextRequest) {
   return Response.json({
     chat: {
       created_at: chat.created_at,
+      group_name: chat.group_name,
       id: chat.id,
       title: chat.title,
       updated_at: chat.updated_at,

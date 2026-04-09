@@ -1,8 +1,11 @@
-import { normalizeChatTitle } from "@/lib/chats/title";
+import {
+  normalizeChatGroupName,
+  normalizeChatTitle,
+} from "@/lib/chats/title";
 import {
   deleteAgentChat,
   getAgentChat,
-  updateAgentChatTitle,
+  updateAgentChat,
 } from "@/lib/supabase/agent-chats";
 import { NextRequest } from "next/server";
 
@@ -56,11 +59,27 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 
   const { chatId } = await context.params;
-  const { title }: { title?: string } = await request.json();
-  const updatedChat = await updateAgentChatTitle({
+  const payload = ((await request.json()) ?? {}) as {
+    groupName?: string | null;
+    title?: string;
+  };
+
+  const nextTitle = Object.prototype.hasOwnProperty.call(payload, "title")
+    ? normalizeChatTitle(payload.title)
+    : undefined;
+  const nextGroupName = Object.prototype.hasOwnProperty.call(payload, "groupName")
+    ? normalizeChatGroupName(payload.groupName)
+    : undefined;
+
+  if (nextTitle === undefined && nextGroupName === undefined) {
+    return Response.json({ error: "No chat updates provided" }, { status: 400 });
+  }
+
+  const updatedChat = await updateAgentChat({
     chatId,
+    groupName: nextGroupName,
     sessionId,
-    title: normalizeChatTitle(title),
+    title: nextTitle,
   });
 
   if (!updatedChat) {
@@ -70,6 +89,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   return Response.json({
     chat: {
       created_at: updatedChat.created_at,
+      group_name: updatedChat.group_name,
       id: updatedChat.id,
       title: updatedChat.title,
       updated_at: updatedChat.updated_at,

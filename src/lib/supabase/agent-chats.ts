@@ -8,6 +8,7 @@ export type AgentChatRecord = {
   id: string;
   session_id: string;
   workspace_id: string;
+  group_name: string | null;
   title: string;
   messages: ChatUIMessage[];
   created_at: string;
@@ -16,7 +17,7 @@ export type AgentChatRecord = {
 
 export type AgentChatListItem = Pick<
   AgentChatRecord,
-  "id" | "title" | "created_at" | "updated_at"
+  "id" | "title" | "group_name" | "created_at" | "updated_at"
 >;
 
 export async function getAgentChats({
@@ -29,7 +30,7 @@ export async function getAgentChats({
   return await supabaseRequest<AgentChatListItem[]>({
     method: "GET",
     searchParams: {
-      select: "id,title,created_at,updated_at",
+      select: "id,title,group_name,created_at,updated_at",
       session_id: `eq.${sessionId}`,
       ...(workspaceId ? { workspace_id: `eq.${workspaceId}` } : {}),
       order: "updated_at.desc",
@@ -59,11 +60,13 @@ export async function getAgentChat({
 }
 
 export async function createAgentChat({
+  groupName,
   messages = [],
   sessionId,
   title,
   workspaceId,
 }: {
+  groupName?: string | null;
   messages?: ChatUIMessage[];
   sessionId: string;
   title: string;
@@ -71,6 +74,7 @@ export async function createAgentChat({
 }) {
   const chats = await supabaseRequest<AgentChatRecord[]>({
     body: {
+      group_name: groupName ?? null,
       messages,
       session_id: sessionId,
       title,
@@ -109,19 +113,32 @@ export async function updateAgentChatMessages({
   return chats[0] ?? null;
 }
 
-export async function updateAgentChatTitle({
+export async function updateAgentChat({
   chatId,
+  groupName,
   sessionId,
   title,
 }: {
   chatId: string;
+  groupName?: string | null;
   sessionId: string;
-  title: string;
+  title?: string;
 }) {
+  const body: {
+    group_name?: string | null;
+    title?: string;
+  } = {};
+
+  if (title !== undefined) {
+    body.title = title;
+  }
+
+  if (groupName !== undefined) {
+    body.group_name = groupName;
+  }
+
   const chats = await supabaseRequest<AgentChatRecord[]>({
-    body: {
-      title,
-    },
+    body,
     method: "PATCH",
     prefer: "return=representation",
     searchParams: {

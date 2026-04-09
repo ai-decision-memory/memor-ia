@@ -2,7 +2,10 @@
 
 import type { ChatUIMessage } from "@/lib/chat-messages";
 import type { SourceCitation } from "@/lib/citations";
-import { buildChatTitleFromMessages } from "@/lib/chats/title";
+import {
+  buildChatTitleFromMessages,
+  normalizeChatGroupName,
+} from "@/lib/chats/title";
 import { buildDocFileName } from "@/lib/docs/title";
 import type { AgentDocKind, AgentDocSummary } from "@/lib/docs/types";
 import { useChat } from "@ai-sdk/react";
@@ -27,6 +30,7 @@ import { TextScramble } from "./TextScramble";
 
 type ChatSummary = {
   created_at: string;
+  group_name: string | null;
   id: string;
   title: string;
   updated_at: string;
@@ -59,6 +63,11 @@ type SidebarMenuState =
       kind: "chat" | "doc";
     }
   | null;
+
+type ChatFolderSection = {
+  chats: ChatSummary[];
+  name: string;
+};
 
 const NEW_CHAT_ID = "new-chat";
 const TEMP_CHAT_ID_PREFIX = "temp-chat-";
@@ -271,6 +280,90 @@ function RenameItemModal({
   );
 }
 
+function ChatFolderModal({
+  chatTitle,
+  currentGroupName,
+  onClose,
+  onRemove,
+  onSave,
+}: {
+  chatTitle: string;
+  currentGroupName: string | null;
+  onClose: () => void;
+  onRemove: () => void;
+  onSave: (groupName: string) => void;
+}) {
+  const [groupName, setGroupName] = useState(currentGroupName ?? "");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.select();
+  }, []);
+
+  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    onSave(groupName);
+  };
+
+  return (
+    <ConnectionModal onClose={onClose}>
+      <p className="text-sm font-medium text-text-primary">Move chat to folder</p>
+      <p className="mt-1 text-xs text-text-muted">
+        Organize {chatTitle} inside a named folder.
+      </p>
+      <form onSubmit={handleSubmit} className="mt-4 space-y-3">
+        <div>
+          <label
+            className="block text-xs font-medium text-text-secondary"
+            htmlFor="chat-folder-name"
+          >
+            Folder name
+          </label>
+          <input
+            id="chat-folder-name"
+            ref={inputRef}
+            type="text"
+            value={groupName}
+            onChange={(event) => setGroupName(event.target.value)}
+            className="mt-1 w-full rounded-lg bg-page px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-muted"
+            placeholder="Roadmap"
+            autoFocus
+          />
+        </div>
+        <div className="flex items-center justify-between gap-3 pt-1">
+          {currentGroupName ? (
+            <button
+              type="button"
+              onClick={onRemove}
+              className="text-xs text-red-400 hover:text-red-300"
+            >
+              Remove from folder
+            </button>
+          ) : (
+            <span />
+          )}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-xs text-text-muted hover:text-text-primary"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!groupName.trim()}
+              className="rounded-lg bg-accent px-4 py-1.5 text-xs font-medium text-accent-text transition hover:opacity-80 disabled:opacity-40"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      </form>
+    </ConnectionModal>
+  );
+}
+
 function DeleteItemModal({
   description,
   itemLabel,
@@ -353,11 +446,13 @@ export const Chat = ({
     githubPatError ? "github" : linearApiKeyError ? "linear" : null,
   );
   const [renamingItem, setRenamingItem] = useState<SidebarMenuState>(null);
+  const [folderingChatId, setFolderingChatId] = useState<string | null>(null);
   const [deletingItem, setDeletingItem] = useState<SidebarMenuState>(null);
   const [isEditingDoc, setIsEditingDoc] = useState(false);
   const [docDraftContent, setDocDraftContent] = useState(activeDoc?.content ?? "");
   const [isSavingDoc, setIsSavingDoc] = useState(false);
   const [savingChatAsDocId, setSavingChatAsDocId] = useState<string | null>(null);
+  const [collapsedChatFolders, setCollapsedChatFolders] = useState<Record<string, boolean>>({});
 
   const closeSidebarMenu = useCallback(() => setOpenMenu(null), []);
 
@@ -403,14 +498,11 @@ export const Chat = ({
   const chatStatus =
     isPersistingChat || isStartingTemporaryChat ? "submitted" : undefined;
 
-  const updateSidebarChatTitle = (chatId: string, title: string) => {
+  const replaceSidebarChat = (chatId: string, updater: (chat: ChatSummary) => ChatSummary) => {
     setSidebarChats((currentChats) =>
       currentChats.map((chat) =>
         chat.id === chatId
-          ? {
-              ...chat,
-              title,
-            }
+          ? updater(chat)
           : chat,
       ),
     );
@@ -430,23 +522,28 @@ export const Chat = ({
     setLocalActiveDoc((currentDoc) => (currentDoc?.id === doc.id ? doc : currentDoc));
   }, []);
 
-  const persistChatTitle = async ({
+  const persistChat = async ({
     chatId,
+    groupName,
     title,
   }: {
     chatId: string;
-    title: string;
+    groupName?: string | null;
+    title?: string;
   }) => {
     const response = await fetch(`/api/chats/${chatId}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ title }),
+      body: JSON.stringify({
+        ...(groupName !== undefined ? { groupName } : {}),
+        ...(title !== undefined ? { title } : {}),
+      }),
     });
 
     if (!response.ok) {
-      throw new Error((await response.text()) || "Failed to update chat title");
+      throw new Error((await response.text()) || "Failed to update chat");
     }
 
     const payload = (await response.json()) as {
@@ -455,6 +552,46 @@ export const Chat = ({
 
     return payload.chat;
   };
+
+  const chatFolderSections = useMemo(() => {
+    const groupedChats = new Map<string, ChatSummary[]>();
+    const ungroupedChats: ChatSummary[] = [];
+
+    for (const chat of sidebarChats) {
+      const groupName = normalizeChatGroupName(chat.group_name);
+
+      if (!groupName) {
+        ungroupedChats.push(chat);
+        continue;
+      }
+
+      const folderChats = groupedChats.get(groupName) ?? [];
+      folderChats.push(chat);
+      groupedChats.set(groupName, folderChats);
+    }
+
+    const folders: ChatFolderSection[] = Array.from(groupedChats.entries())
+      .sort(([leftName], [rightName]) =>
+        leftName.localeCompare(rightName, undefined, { sensitivity: "base" }),
+      )
+      .map(([name, chats]) => ({
+        chats,
+        name,
+      }));
+
+    return {
+      folders,
+      ungroupedChats,
+    };
+  }, [sidebarChats]);
+
+  const folderingChat = useMemo(
+    () =>
+      folderingChatId
+        ? sidebarChats.find((chat) => chat.id === folderingChatId) ?? null
+        : null,
+    [folderingChatId, sidebarChats],
+  );
 
   const persistDoc = async ({
     content,
@@ -609,9 +746,11 @@ export const Chat = ({
   };
 
   const handleCreateChat = async ({
+    groupName,
     messages: nextMessages,
     title,
   }: {
+    groupName?: string | null;
     messages?: ChatUIMessage[];
     title?: string;
   } = {}) => {
@@ -621,6 +760,7 @@ export const Chat = ({
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
+        ...(groupName !== undefined ? { groupName } : {}),
         ...(Array.isArray(nextMessages) ? { messages: nextMessages } : {}),
         ...(title ? { title } : {}),
       }),
@@ -807,21 +947,63 @@ export const Chat = ({
     const chat = sidebarChats.find((c) => c.id === chatId);
     setRenamingItem(null);
 
-    if (!newTitle || newTitle.trim() === "" || newTitle === chat?.title) {
+    const trimmedTitle = newTitle.trim();
+
+    if (!chat || trimmedTitle === "" || trimmedTitle === chat.title) {
       return;
     }
 
-    const trimmedTitle = newTitle.trim();
-    updateSidebarChatTitle(chatId, trimmedTitle);
+    replaceSidebarChat(chatId, (currentChat) => ({
+      ...currentChat,
+      title: trimmedTitle,
+    }));
 
-    persistChatTitle({ chatId, title: trimmedTitle }).catch((renameError) => {
-      if (chat) updateSidebarChatTitle(chatId, chat.title);
-      setClientError(
-        renameError instanceof Error
-          ? renameError.message
-          : "Failed to rename chat",
-      );
-    });
+    persistChat({ chatId, title: trimmedTitle })
+      .then((updatedChat) => {
+        replaceSidebarChat(chatId, () => updatedChat);
+      })
+      .catch((renameError) => {
+        replaceSidebarChat(chatId, () => chat);
+        setClientError(
+          renameError instanceof Error
+            ? renameError.message
+            : "Failed to rename chat",
+        );
+      });
+  };
+
+  const handleMoveChatToFolder = (chatId: string, nextGroupName: string | null) => {
+    const chat = sidebarChats.find((item) => item.id === chatId);
+    setFolderingChatId(null);
+    setClientError(null);
+
+    if (!chat) {
+      return;
+    }
+
+    const normalizedGroupName = normalizeChatGroupName(nextGroupName);
+
+    if (normalizedGroupName === chat.group_name) {
+      return;
+    }
+
+    replaceSidebarChat(chatId, (currentChat) => ({
+      ...currentChat,
+      group_name: normalizedGroupName,
+    }));
+
+    persistChat({ chatId, groupName: normalizedGroupName })
+      .then((updatedChat) => {
+        replaceSidebarChat(chatId, () => updatedChat);
+      })
+      .catch((moveError) => {
+        replaceSidebarChat(chatId, () => chat);
+        setClientError(
+          moveError instanceof Error
+            ? moveError.message
+            : "Failed to move chat to folder",
+        );
+      });
   };
 
   const handleRenameDoc = (docId: string, newTitle: string) => {
@@ -911,6 +1093,128 @@ export const Chat = ({
     }
   };
 
+  const toggleChatFolder = (folderName: string) => {
+    setCollapsedChatFolders((currentFolders) => ({
+      ...currentFolders,
+      [folderName]: !currentFolders[folderName],
+    }));
+  };
+
+  const renderChatItem = (
+    chat: ChatSummary,
+    { nested = false }: { nested?: boolean } = {},
+  ) => {
+    const isActive = chat.id === activeChatId;
+    const isMenuOpen = openMenu?.kind === "chat" && openMenu.id === chat.id;
+
+    return (
+      <div
+        key={chat.id}
+        className={`flex items-center gap-2 rounded-lg px-3 py-2 transition ${
+          nested ? "ml-4" : ""
+        } ${
+          isActive
+            ? "bg-page text-text-primary"
+            : "text-text-secondary hover:bg-surface-raised hover:text-text-primary"
+        }`}
+      >
+        <Link href={`/chats/${chat.id}`} className="min-w-0 flex-1">
+          <p className="truncate text-sm">
+            <TextScramble>{chat.title}</TextScramble>
+          </p>
+        </Link>
+        <div
+          className="relative self-center shrink-0"
+          ref={isMenuOpen ? menuRef : undefined}
+        >
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              setOpenMenu(
+                isMenuOpen ? null : { id: chat.id, kind: "chat" },
+              );
+            }}
+            className="flex h-6 w-6 items-center justify-center rounded text-sm leading-none text-text-muted transition hover:text-text-primary"
+          >
+            &#x22EF;
+          </button>
+          {isMenuOpen ? (
+            <div className="absolute right-0 top-full z-10 mt-1 min-w-[10.5rem] rounded-lg bg-page py-1 shadow-lg">
+              <button
+                type="button"
+                disabled={savingChatAsDocId === chat.id}
+                onClick={() => void handleSaveChatAsDoc(chat.id)}
+                className="block w-full px-3 py-1.5 text-left text-xs text-text-secondary transition hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {savingChatAsDocId === chat.id ? "Saving..." : "Save as doc"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenMenu(null);
+                  setFolderingChatId(chat.id);
+                }}
+                className="block w-full px-3 py-1.5 text-left text-xs text-text-secondary hover:text-text-primary"
+              >
+                {chat.group_name ? "Move to folder" : "Add to folder"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenMenu(null);
+                  setRenamingItem({ id: chat.id, kind: "chat" });
+                }}
+                className="block w-full px-3 py-1.5 text-left text-xs text-text-secondary hover:text-text-primary"
+              >
+                Rename
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenMenu(null);
+                  setDeletingItem({ id: chat.id, kind: "chat" });
+                }}
+                className="block w-full px-3 py-1.5 text-left text-xs text-red-400 hover:text-red-300"
+              >
+                Delete
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    );
+  };
+
+  const renderChatFolderSection = (folder: ChatFolderSection) => {
+    const isCollapsed = collapsedChatFolders[folder.name] ?? false;
+
+    return (
+      <div key={folder.name} className="mt-2">
+        <button
+          type="button"
+          onClick={() => toggleChatFolder(folder.name)}
+          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition hover:bg-surface-raised"
+        >
+          <span className="w-3 text-[10px] text-text-muted">
+            {isCollapsed ? ">" : "v"}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-sm font-medium text-text-primary">
+            {folder.name}
+          </span>
+          <span className="text-[11px] text-text-muted">
+            {folder.chats.length}
+          </span>
+        </button>
+        {!isCollapsed ? (
+          <div className="mt-1 space-y-0.5">
+            {folder.chats.map((chat) => renderChatItem(chat, { nested: true }))}
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+
   return (
     <div className="flex h-screen flex-col bg-sidebar lg:flex-row">
       <aside className="flex w-full flex-col px-4 py-4 text-text-primary lg:h-screen lg:w-72 lg:shrink-0">
@@ -944,77 +1248,24 @@ export const Chat = ({
               </div>
             ) : null}
 
-            {sidebarChats.map((chat) => {
-              const isActive = chat.id === activeChatId;
-              const isMenuOpen =
-                openMenu?.kind === "chat" && openMenu.id === chat.id;
-
-              return (
-                <div
-                  key={chat.id}
-                  className={`flex items-center gap-2 rounded-lg px-3 py-2 transition ${
-                    isActive
-                      ? "bg-page text-text-primary"
-                      : "text-text-secondary hover:bg-surface-raised hover:text-text-primary"
-                  }`}
-                >
-                  <Link href={`/chats/${chat.id}`} className="min-w-0 flex-1">
-                    <p className="truncate text-sm">
-                      <TextScramble>{chat.title}</TextScramble>
+            {chatFolderSections.folders.length > 0 ? (
+              <>
+                {chatFolderSections.ungroupedChats.length > 0 ? (
+                  <div className="mb-2 mt-3 flex items-center justify-between px-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+                      Ungrouped
                     </p>
-                  </Link>
-                  <div
-                    className="relative self-center shrink-0"
-                    ref={isMenuOpen ? menuRef : undefined}
-                  >
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setOpenMenu(
-                          isMenuOpen ? null : { id: chat.id, kind: "chat" },
-                        );
-                      }}
-                      className="flex h-6 w-6 items-center justify-center rounded text-sm leading-none text-text-muted transition hover:text-text-primary"
-                    >
-                      &#x22EF;
-                    </button>
-                    {isMenuOpen ? (
-                      <div className="absolute right-0 top-full z-10 mt-1 min-w-[10.5rem] rounded-lg bg-page py-1 shadow-lg">
-                        <button
-                          type="button"
-                          disabled={savingChatAsDocId === chat.id}
-                          onClick={() => void handleSaveChatAsDoc(chat.id)}
-                          className="block w-full px-3 py-1.5 text-left text-xs text-text-secondary transition hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                          {savingChatAsDocId === chat.id ? "Saving…" : "Save as doc"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setOpenMenu(null);
-                            setRenamingItem({ id: chat.id, kind: "chat" });
-                          }}
-                          className="block w-full px-3 py-1.5 text-left text-xs text-text-secondary hover:text-text-primary"
-                        >
-                          Rename
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setOpenMenu(null);
-                            setDeletingItem({ id: chat.id, kind: "chat" });
-                          }}
-                          className="block w-full px-3 py-1.5 text-left text-xs text-red-400 hover:text-red-300"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    ) : null}
+                    <span className="text-[11px] text-text-muted">
+                      {chatFolderSections.ungroupedChats.length}
+                    </span>
                   </div>
-                </div>
-              );
-            })}
+                ) : null}
+                {chatFolderSections.ungroupedChats.map((chat) => renderChatItem(chat))}
+                {chatFolderSections.folders.map((folder) => renderChatFolderSection(folder))}
+              </>
+            ) : (
+              sidebarChats.map((chat) => renderChatItem(chat))
+            )}
 
             {currentTemporaryChat ? (
               <button
@@ -1310,7 +1561,7 @@ export const Chat = ({
                   </div>
                 ) : (
                   <p className="text-xs text-text-muted">
-                    Chats stay in the sidebar.
+                    Chats stay in the sidebar, and you can organize them into folders.
                   </p>
                 )}
               </div>
@@ -1354,6 +1605,7 @@ export const Chat = ({
 
       {renamingItem ? (
         <RenameItemModal
+          key={`${renamingItem.kind}-${renamingItem.id}`}
           itemLabel={getItemLabel(renamingItem.kind)}
           currentTitle={
             renamingItem.kind === "chat"
@@ -1366,6 +1618,17 @@ export const Chat = ({
               ? handleRenameChat(renamingItem.id, title)
               : handleRenameDoc(renamingItem.id, title)
           }
+        />
+      ) : null}
+
+      {folderingChat ? (
+        <ChatFolderModal
+          key={folderingChat.id}
+          chatTitle={folderingChat.title}
+          currentGroupName={folderingChat.group_name}
+          onClose={() => setFolderingChatId(null)}
+          onRemove={() => handleMoveChatToFolder(folderingChat.id, null)}
+          onSave={(groupName) => handleMoveChatToFolder(folderingChat.id, groupName)}
         />
       ) : null}
 
