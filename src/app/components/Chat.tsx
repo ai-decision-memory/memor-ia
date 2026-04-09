@@ -357,6 +357,7 @@ export const Chat = ({
   const [isEditingDoc, setIsEditingDoc] = useState(false);
   const [docDraftContent, setDocDraftContent] = useState(activeDoc?.content ?? "");
   const [isSavingDoc, setIsSavingDoc] = useState(false);
+  const [savingChatAsDocId, setSavingChatAsDocId] = useState<string | null>(null);
 
   const closeSidebarMenu = useCallback(() => setOpenMenu(null), []);
 
@@ -735,6 +736,44 @@ export const Chat = ({
     }
   };
 
+  const handleSaveChatAsDoc = async (chatId: string) => {
+    setOpenMenu(null);
+    setClientError(null);
+    setSavingChatAsDocId(chatId);
+
+    try {
+      const response = await fetch("/api/docs", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ chatId }),
+      });
+
+      if (!response.ok) {
+        throw new Error((await response.text()) || "Failed to save chat as document");
+      }
+
+      const payload = (await response.json()) as {
+        doc: PersistedDoc;
+      };
+
+      setSidebarDocs((currentDocs) => [
+        summarizeDoc(payload.doc),
+        ...currentDocs.filter((doc) => doc.id !== payload.doc.id),
+      ]);
+      router.push(`/docs/${payload.doc.id}`);
+    } catch (saveAsDocError) {
+      setClientError(
+        saveAsDocError instanceof Error
+          ? saveAsDocError.message
+          : "Failed to save chat as document",
+      );
+    } finally {
+      setSavingChatAsDocId(null);
+    }
+  };
+
   const handleDeleteDoc = async (docId: string) => {
     setDeletingItem(null);
     setClientError(null);
@@ -941,7 +980,15 @@ export const Chat = ({
                       &#x22EF;
                     </button>
                     {isMenuOpen ? (
-                      <div className="absolute right-0 top-full z-10 mt-1 w-32 rounded-lg bg-page py-1 shadow-lg">
+                      <div className="absolute right-0 top-full z-10 mt-1 min-w-[10.5rem] rounded-lg bg-page py-1 shadow-lg">
+                        <button
+                          type="button"
+                          disabled={savingChatAsDocId === chat.id}
+                          onClick={() => void handleSaveChatAsDoc(chat.id)}
+                          className="block w-full px-3 py-1.5 text-left text-xs text-text-secondary transition hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          {savingChatAsDocId === chat.id ? "Saving…" : "Save as doc"}
+                        </button>
                         <button
                           type="button"
                           onClick={() => {
@@ -994,6 +1041,86 @@ export const Chat = ({
             ) : null}
           </div>
 
+          <div className="mt-6">
+            <div className="mb-2 flex items-center justify-between px-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+                Docs
+              </p>
+              <span className="text-[11px] text-text-muted">
+                {sidebarDocs.length}
+              </span>
+            </div>
+
+            {sidebarDocs.length === 0 ? (
+              <div className="px-3 py-3 text-sm text-text-muted">
+                Save a chat as a doc from its menu.
+              </div>
+            ) : null}
+
+            {sidebarDocs.map((doc) => {
+              const isActive = doc.id === resolvedActiveDoc?.id;
+              const isMenuOpen =
+                openMenu?.kind === "doc" && openMenu.id === doc.id;
+
+              return (
+                <div
+                  key={doc.id}
+                  className={`flex items-center gap-2 rounded-lg px-3 py-2 transition ${
+                    isActive
+                      ? "bg-page text-text-primary"
+                      : "text-text-secondary hover:bg-surface-raised hover:text-text-primary"
+                  }`}
+                >
+                  <Link href={`/docs/${doc.id}`} className="min-w-0 flex-1">
+                    <p className="truncate text-sm">
+                      <TextScramble>{buildDocFileName(doc.title)}</TextScramble>
+                    </p>
+                  </Link>
+                  <div
+                    className="relative self-center shrink-0"
+                    ref={isMenuOpen ? menuRef : undefined}
+                  >
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setOpenMenu(
+                          isMenuOpen ? null : { id: doc.id, kind: "doc" },
+                        );
+                      }}
+                      className="flex h-6 w-6 items-center justify-center rounded text-sm leading-none text-text-muted transition hover:text-text-primary"
+                    >
+                      &#x22EF;
+                    </button>
+                    {isMenuOpen ? (
+                      <div className="absolute right-0 top-full z-10 mt-1 w-32 rounded-lg bg-page py-1 shadow-lg">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOpenMenu(null);
+                            setRenamingItem({ id: doc.id, kind: "doc" });
+                          }}
+                          className="block w-full px-3 py-1.5 text-left text-xs text-text-secondary hover:text-text-primary"
+                        >
+                          Rename
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOpenMenu(null);
+                            setDeletingItem({ id: doc.id, kind: "doc" });
+                          }}
+                          className="block w-full px-3 py-1.5 text-left text-xs text-red-400 hover:text-red-300"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </nav>
 
         <div className="group mt-3 shrink-0 rounded-xl transition-colors duration-300 hover:bg-page">
